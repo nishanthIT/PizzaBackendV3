@@ -10,13 +10,13 @@
 
 // const generateOtp = async (req, res) => {
 //   const { mobile } = req.body;
-  
+
 //   if (!mobile) {
 //     return res.status(400).json({ success: false, message: 'Mobile number required' });
 //   }
 
 //   const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  
+
 //   // Store OTP for 5 minutes
 //   otpStorage[mobile] = {
 //     otp,
@@ -37,7 +37,7 @@
 //       { expiresIn: '1d' }
 //     );
 //   };
-  
+
 //   const verifyOtp = async (req, res) => {
 //     const { mobile, otp } = req.body;
 //    console.log("verify otp called")
@@ -46,13 +46,13 @@
 //        console.log("mobile or otp not provided")
 
 //       return res.status(400).json({ success: false, message: 'Mobile and OTP required' });
-     
+
 //     }
-  
+
 //     try {
 //       const storedOtp = otpStorage[mobile];
 //       console.log("storedOtp", storedOtp, "otp", otp);
-      
+
 //       if (!storedOtp || storedOtp.expires < Date.now() || storedOtp.otp !== otp) {
 //         console.log("otp not valid or expired")
 //         return res.status(400).json({ 
@@ -65,7 +65,7 @@
 //       let user = await prisma.user.findUnique({
 //         where: { phone: mobile }
 //       });
-     
+
 //       // Create new user if doesn't exist
 //       if (!user) {
 //         user = await prisma.user.create({
@@ -78,11 +78,11 @@
 //           }
 //         });
 //       }
-  
+
 //       // Generate JWT token
 //       const token = generateToken(user.id, user.phone);
 //       console.log('Generated token:', token);
-  
+
 //       // Set cookie with token
 //       res.cookie('authToken', token, {
 //         httpOnly: true,
@@ -91,7 +91,7 @@
 //         maxAge: 24 * 60 * 60 * 1000,
 //         domain: 'localhost' // Add this for local development
 //       });
-      
+
 //       delete otpStorage[mobile];
 //       return res.status(200).json({ 
 //         success: true,
@@ -102,7 +102,7 @@
 //           email: user.email
 //         }
 //       });
-  
+
 //     } catch (error) {
 //       console.error('Verification error:', error);
 //       return res.status(500).json({ 
@@ -145,20 +145,20 @@
 //   if (mobile.startsWith('+')) {
 //     return mobile;
 //   }
-  
+
 //   if (mobile.length === 10) {
 //     return `+44${mobile}`;
 //   } else if (mobile.length === 11 && mobile.startsWith('0')) {
 //     return `+44${mobile.substring(1)}`;
 //   }
-  
+
 //   return mobile;
 // };
 
 // const generateOtp = async (req, res) => {
 //   console.log("generateOtp called");
 //   const { mobile } = req.body;
-  
+
 //   if (!mobile) {
 //     return res.status(400).json({ success: false, message: 'Mobile number required' });
 //   }
@@ -176,13 +176,13 @@
 //   }
 
 //   const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  
+
 //   // Store OTP for 5 minutes (use formatted mobile number)
 //   otpStorage[formattedMobile] = {
 //     otp,
 //     expires: Date.now() + 300000
 //   };
-  
+
 //   console.log("otpStorage", otpStorage);
 //   console.log(`OTP for ${formattedMobile}: ${otp}`);
 
@@ -195,7 +195,7 @@
 //     });
 
 //     console.log(`SMS sent successfully to ${formattedMobile}. SID: ${message.sid}`);
-    
+
 //     res.status(200).json({ 
 //       success: true, 
 //       message: 'OTP sent successfully',
@@ -204,10 +204,10 @@
 
 //   } catch (error) {
 //     console.error('Error sending SMS:', error);
-    
+
 //     // Remove OTP from storage if SMS failed
 //     delete otpStorage[formattedMobile];
-    
+
 //     res.status(500).json({ 
 //       success: false, 
 //       message: 'Failed to send OTP. Please try again.',
@@ -228,7 +228,7 @@
 //   const { mobile, otp } = req.body;
 //   console.log("verify otp called");
 //   console.log("mobile", mobile, "otp", otp);
-  
+
 //   if (!mobile || !otp) {
 //     console.log("mobile or otp not provided");
 //     return res.status(400).json({ success: false, message: 'Mobile and OTP required' });
@@ -237,13 +237,13 @@
 //   try {
 //     // Format mobile number same way as in generateOtp
 //     const formattedMobile = formatMobileNumber(mobile);
-    
+
 //     console.log("Formatted mobile:", formattedMobile);
 //     console.log("Current otpStorage:", otpStorage);
-    
+
 //     const storedOtp = otpStorage[formattedMobile];
 //     console.log("storedOtp", storedOtp, "input otp", otp);
-    
+
 //     if (!storedOtp || storedOtp.expires < Date.now() || storedOtp.otp !== otp) {
 //       console.log("otp not valid or expired");
 //       return res.status(400).json({ 
@@ -251,14 +251,14 @@
 //         message: 'Invalid or expired OTP' 
 //       });
 //     }
-    
+
 //     console.log("otp success");
-    
+
 //     // Check if user exists with formatted mobile number
 //     let user = await prisma.user.findUnique({
 //       where: { phone: formattedMobile }
 //     });
-   
+
 //     // Create new user if doesn't exist
 //     if (!user) {
 //       user = await prisma.user.create({
@@ -287,10 +287,10 @@
 //       maxAge: 24 * 60 * 60 * 1000,
 //       domain: domain // Use environment variable for domain
 //     });
-    
+
 //     // Clean up OTP storage
 //     delete otpStorage[formattedMobile];
-    
+
 //     return res.status(200).json({ 
 //       success: true,
 //       user: {
@@ -340,20 +340,20 @@
 //   if (mobile.startsWith('+')) {
 //     return mobile;
 //   }
-  
+
 //   if (mobile.length === 10) {
 //     return `+44${mobile}`;
 //   } else if (mobile.length === 11 && mobile.startsWith('0')) {
 //     return `+44${mobile.substring(1)}`;
 //   }
-  
+
 //   return mobile;
 // };
 
 // const generateOtp = async (req, res) => {
 //   console.log("generateOtp called");
 //   const { mobile } = req.body;
-  
+
 //   if (!mobile) {
 //     return res.status(400).json({ success: false, message: 'Mobile number required' });
 //   }
@@ -369,12 +369,12 @@
 //   }
 
 //   const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  
+
 //   otpStorage[formattedMobile] = {
 //     otp,
 //     expires: Date.now() + 300000
 //   };
-  
+
 //   console.log("otpStorage", otpStorage);
 //   console.log(`OTP for ${formattedMobile}: ${otp}`);
 
@@ -386,7 +386,7 @@
 //     });
 
 //     console.log(`SMS sent successfully to ${formattedMobile}. SID: ${message.sid}`);
-    
+
 //     res.status(200).json({ 
 //       success: true, 
 //       message: 'OTP sent successfully',
@@ -395,9 +395,9 @@
 
 //   } catch (error) {
 //     console.error('Error sending SMS:', error);
-    
+
 //     delete otpStorage[formattedMobile];
-    
+
 //     res.status(500).json({ 
 //       success: false, 
 //       message: 'Failed to send OTP. Please try again.',
@@ -418,7 +418,7 @@
 //   const { mobile, otp } = req.body;
 //   console.log("verify otp called");
 //   console.log("mobile", mobile, "otp", otp);
-  
+
 //   if (!mobile || !otp) {
 //     console.log("mobile or otp not provided");
 //     return res.status(400).json({ success: false, message: 'Mobile and OTP required' });
@@ -426,13 +426,13 @@
 
 //   try {
 //     const formattedMobile = formatMobileNumber(mobile);
-    
+
 //     console.log("Formatted mobile:", formattedMobile);
 //     console.log("Current otpStorage:", otpStorage);
-    
+
 //     const storedOtp = otpStorage[formattedMobile];
 //     console.log("storedOtp", storedOtp, "input otp", otp);
-    
+
 //     if (!storedOtp || storedOtp.expires < Date.now() || storedOtp.otp !== otp) {
 //       console.log("otp not valid or expired");
 //       return res.status(400).json({ 
@@ -440,14 +440,14 @@
 //         message: 'Invalid or expired OTP' 
 //       });
 //     }
-    
+
 //     console.log("otp success");
-    
+
 //     // Check if user exists with formatted mobile number
 //     let user = await prisma.user.findUnique({
 //       where: { phone: formattedMobile }
 //     });
-   
+
 //     // If user doesn't exist, indicate this is a new user
 //     if (!user) {
 //       // Store the verified mobile in session for registration completion
@@ -455,7 +455,7 @@
 //         ...otpStorage[formattedMobile],
 //         verified: true
 //       };
-      
+
 //       return res.status(200).json({ 
 //         success: true,
 //         isNewUser: true,
@@ -470,7 +470,7 @@
 //     const domain = process.env.NODE_ENV === 'production' 
 //       ? '.circlepizzapizza.co.uk'
 //       : 'localhost';
-    
+
 //     res.cookie('authToken', token, {
 //       httpOnly: true,
 //       secure: process.env.NODE_ENV === 'production',
@@ -478,9 +478,9 @@
 //       maxAge: 24 * 60 * 60 * 1000,
 //       domain: domain
 //     });
-    
+
 //     delete otpStorage[formattedMobile];
-    
+
 //     return res.status(200).json({ 
 //       success: true,
 //       user: {
@@ -502,7 +502,7 @@
 
 // const completeRegistration = async (req, res) => {
 //   const { mobile, name, address } = req.body;
-  
+
 //   if (!mobile || !name || !address) {
 //     return res.status(400).json({ 
 //       success: false, 
@@ -512,7 +512,7 @@
 
 //   try {
 //     const formattedMobile = formatMobileNumber(mobile);
-    
+
 //     // Check if the mobile was verified
 //     const storedData = otpStorage[formattedMobile];
 //     if (!storedData || !storedData.verified) {
@@ -535,11 +535,11 @@
 
 //     // Generate JWT token
 //     const token = generateToken(user.id, user.phone);
-    
+
 //     const domain = process.env.NODE_ENV === 'production' 
 //       ? '.circlepizzapizza.co.uk'
 //       : 'localhost';
-    
+
 //     res.cookie('authToken', token, {
 //       httpOnly: true,
 //       secure: process.env.NODE_ENV === 'production',
@@ -547,10 +547,10 @@
 //       maxAge: 24 * 60 * 60 * 1000,
 //       domain: domain
 //     });
-    
+
 //     // Clean up OTP storage
 //     delete otpStorage[formattedMobile];
-    
+
 //     return res.status(200).json({ 
 //       success: true,
 //       user: {
@@ -602,13 +602,13 @@ const formatMobileNumber = (mobile) => {
   if (mobile.startsWith('+')) {
     return mobile;
   }
-  
+
   if (mobile.length === 10) {
     return `+44${mobile}`;
   } else if (mobile.length === 11 && mobile.startsWith('0')) {
     return `+44${mobile.substring(1)}`;
   }
-  
+
   return mobile;
 };
 
@@ -668,7 +668,7 @@ setInterval(cleanupExpiredEntries, 5 * 60 * 1000);
 const generateOtp = async (req, res) => {
   console.log("generateOtp called");
   const { mobile } = req.body;
-  
+
   if (!mobile) {
     return res.status(400).json({ success: false, message: 'Mobile number required' });
   }
@@ -677,9 +677,9 @@ const generateOtp = async (req, res) => {
 
   const ukPhoneRegex = /^\+44[1-9]\d{8,9}$/;
   if (!ukPhoneRegex.test(formattedMobile)) {
-    return res.status(400).json({ 
-      success: false, 
-      message: 'Invalid UK phone number format. Examples: 7386235014, 07386235014, or +447386235014' 
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid UK phone number format. Examples: 7386235014, 07386235014, or +447386235014'
     });
   }
 
@@ -692,12 +692,12 @@ const generateOtp = async (req, res) => {
   }
 
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
-  
+
   otpStorage[formattedMobile] = {
     otp,
     expires: Date.now() + OTP_EXPIRY
   };
-  
+
   console.log("otpStorage", otpStorage);
   console.log(`OTP for ${formattedMobile}: ${otp}`);
 
@@ -709,9 +709,9 @@ const generateOtp = async (req, res) => {
     });
 
     console.log(`SMS sent successfully to ${formattedMobile}. SID: ${message.sid}`);
-    
-    res.status(200).json({ 
-      success: true, 
+
+    res.status(200).json({
+      success: true,
       message: 'OTP sent successfully',
       messageSid: message.sid,
       expiresIn: OTP_EXPIRY / 1000 // Send expiry time in seconds
@@ -719,13 +719,13 @@ const generateOtp = async (req, res) => {
 
   } catch (error) {
     console.error('Error sending SMS:', error);
-    
+
     delete otpStorage[formattedMobile];
-    
-    res.status(500).json({ 
-      success: false, 
+
+    res.status(500).json({
+      success: false,
       message: 'Failed to send OTP. Please try again.',
-      error: error.message 
+      error: error.message
     });
   }
 };
@@ -742,7 +742,7 @@ const verifyOtp = async (req, res) => {
   const { mobile, otp, name, address } = req.body; // Added name and address parameters
   console.log("verify otp called");
   console.log("mobile", mobile, "otp", otp, "name", name, "address", address);
-  
+
   if (!mobile || !otp) {
     console.log("mobile or otp not provided");
     return res.status(400).json({ success: false, message: 'Mobile and OTP required' });
@@ -750,34 +750,34 @@ const verifyOtp = async (req, res) => {
 
   try {
     const formattedMobile = formatMobileNumber(mobile);
-    
+
     console.log("Formatted mobile:", formattedMobile);
     console.log("Current otpStorage:", otpStorage);
-    
+
     const storedOtp = otpStorage[formattedMobile];
     console.log("storedOtp", storedOtp, "input otp", otp);
-    
+
     if (!storedOtp || storedOtp.expires < Date.now() || storedOtp.otp !== otp) {
       console.log("otp not valid or expired");
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Invalid or expired OTP' 
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired OTP'
       });
     }
-    
+
     console.log("otp success");
-    
+
     // Check if user exists with formatted mobile number
     let user = await prisma.user.findUnique({
       where: { phone: formattedMobile }
     });
-   
+
     // If user doesn't exist, handle based on name parameter
     if (!user) {
       if (name && name.trim()) {
         // Name is provided, register the user automatically
         console.log("Creating new user with name:", name.trim());
-        
+
         user = await prisma.user.create({
           data: {
             phone: formattedMobile,
@@ -792,10 +792,10 @@ const verifyOtp = async (req, res) => {
         const token = generateToken(user.id, user.phone);
         console.log('Generated token for new user:', token);
 
-        const domain = process.env.NODE_ENV === 'production' 
+        const domain = process.env.NODE_ENV === 'production'
           ? '.addiscombepizza.co.uk'
           : 'localhost';
-        
+
         res.cookie('authToken', token, {
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
@@ -803,10 +803,10 @@ const verifyOtp = async (req, res) => {
           maxAge: 24 * 60 * 60 * 1000,
           domain: domain
         });
-        
+
         delete otpStorage[formattedMobile];
-        
-        return res.status(200).json({ 
+
+        return res.status(200).json({
           success: true,
           isNewUser: true,
           user: {
@@ -823,8 +823,8 @@ const verifyOtp = async (req, res) => {
           ...otpStorage[formattedMobile],
           verified: true
         };
-        
-        return res.status(200).json({ 
+
+        return res.status(200).json({
           success: true,
           isNewUser: true,
           requiresRegistration: true,
@@ -837,10 +837,10 @@ const verifyOtp = async (req, res) => {
     const token = generateToken(user.id, user.phone);
     console.log('Generated token for existing user:', token);
 
-    const domain = process.env.NODE_ENV === 'production' 
-      ? '.circlepizzapizza.co.uk'
+    const domain = process.env.NODE_ENV === 'production'
+      ? '.addiscombepizza.co.uk'
       : 'localhost';
-    
+
     res.cookie('authToken', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -848,10 +848,10 @@ const verifyOtp = async (req, res) => {
       maxAge: 24 * 60 * 60 * 1000,
       domain: domain
     });
-    
+
     delete otpStorage[formattedMobile];
-    
-    return res.status(200).json({ 
+
+    return res.status(200).json({
       success: true,
       isNewUser: false,
       user: {
@@ -865,9 +865,9 @@ const verifyOtp = async (req, res) => {
 
   } catch (error) {
     console.error('Verification error:', error);
-    return res.status(500).json({ 
-      success: false, 
-      message: 'Internal server error' 
+    return res.status(500).json({
+      success: false,
+      message: 'Internal server error'
     });
   }
 };
@@ -875,23 +875,23 @@ const verifyOtp = async (req, res) => {
 // Keep this for cases where name wasn't provided during OTP verification
 const completeRegistration = async (req, res) => {
   const { mobile, name, address } = req.body;
-  
+
   if (!mobile || !name) {
-    return res.status(400).json({ 
-      success: false, 
-      message: 'Mobile and name are required' 
+    return res.status(400).json({
+      success: false,
+      message: 'Mobile and name are required'
     });
   }
 
   try {
     const formattedMobile = formatMobileNumber(mobile);
-    
+
     // Check if the mobile was verified
     const storedData = otpStorage[formattedMobile];
     if (!storedData || !storedData.verified) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Please verify your mobile number first' 
+      return res.status(400).json({
+        success: false,
+        message: 'Please verify your mobile number first'
       });
     }
 
@@ -901,9 +901,9 @@ const completeRegistration = async (req, res) => {
     });
 
     if (existingUser) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'User already exists' 
+      return res.status(400).json({
+        success: false,
+        message: 'User already exists'
       });
     }
 
@@ -920,11 +920,11 @@ const completeRegistration = async (req, res) => {
 
     // Generate JWT token
     const token = generateToken(user.id, user.phone);
-    
-    const domain = process.env.NODE_ENV === 'production' 
-      ? '.circlepizzapizza.co.uk'
+
+    const domain = process.env.NODE_ENV === 'production'
+      ? '.addiscombepizza.co.uk'
       : 'localhost';
-    
+
     res.cookie('authToken', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -932,11 +932,11 @@ const completeRegistration = async (req, res) => {
       maxAge: 24 * 60 * 60 * 1000,
       domain: domain
     });
-    
+
     // Clean up OTP storage
     delete otpStorage[formattedMobile];
-    
-    return res.status(200).json({ 
+
+    return res.status(200).json({
       success: true,
       user: {
         id: user.id,
@@ -948,9 +948,9 @@ const completeRegistration = async (req, res) => {
 
   } catch (error) {
     console.error('Registration error:', error);
-    return res.status(500).json({ 
-      success: false, 
-      message: 'Registration failed. Please try again.' 
+    return res.status(500).json({
+      success: false,
+      message: 'Registration failed. Please try again.'
     });
   }
 };

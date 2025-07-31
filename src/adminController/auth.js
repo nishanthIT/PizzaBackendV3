@@ -4,7 +4,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-key-2024";
 
 const ADMIN_CREDENTIALS = {
   username: "ananth",
-  password: "7877866920@addis",
+  password: "7877866920@addis#12345",
 };
 
 export const login = async (req, res) => {
