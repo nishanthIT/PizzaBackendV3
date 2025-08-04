@@ -1,3 +1,5 @@
+
+
 import { PrismaClient } from "@prisma/client";
 import { deleteFile, renameFileToMatchId } from "../utils/fileUtils.js";
 import { calculateComboPrice } from "../utils/calculateComboPrice.js";
@@ -8,10 +10,10 @@ export const addComboOffer = async (req, res) => {
   let tempImageUrl = req.file?.filename || "dummy.png";
 
   try {
-    const { name, description, discount, pizzas } = req.body;
+    const { name, description, discount, pizzas, manualPrice } = req.body;
 
     // Validate required fields
-    if (!name || !description || discount === undefined || !pizzas) {
+    if (!name || !description || (!pizzas)) {
       if (req.file) deleteFile(tempImageUrl);
       return res.status(400).json({ error: "Missing required fields" });
     }
@@ -47,11 +49,19 @@ export const addComboOffer = async (req, res) => {
       }
     }
 
-    // Calculate final price
-    const finalPrice = await calculateComboPrice(
-      parsedPizzas,
-      Number(discount)
-    );
+    // Determine final price based on pricing mode
+    let finalPrice;
+    let finalDiscount = 0;
+
+    if (manualPrice && Number(manualPrice) > 0) {
+      // Manual pricing mode
+      finalPrice = Number(manualPrice);
+      finalDiscount = 0; // No discount when using manual pricing
+    } else {
+      // Percentage discount mode
+      finalDiscount = Number(discount) || 0;
+      finalPrice = await calculateComboPrice(parsedPizzas, finalDiscount);
+    }
 
     const combo = await prisma.$transaction(async (tx) => {
       // Create the combo offer
@@ -59,7 +69,7 @@ export const addComboOffer = async (req, res) => {
         data: {
           name,
           description,
-          discount: Number(discount),
+          discount: finalDiscount,
           price: finalPrice,
           imageUrl: tempImageUrl,
         },
@@ -115,6 +125,7 @@ export const addComboOffer = async (req, res) => {
     });
   }
 };
+
 // Get Combo Offers
 export const getComboOffer = async (req, res) => {
   try {
@@ -136,7 +147,14 @@ export const getComboOffer = async (req, res) => {
           quantity: item.quantity,
         }));
 
-        const finalPrice = await calculateComboPrice(pizzas, combo.discount);
+        // If discount is 0, use the stored price (manual pricing)
+        // Otherwise, recalculate with discount (percentage pricing)
+        let finalPrice;
+        if (combo.discount === 0) {
+          finalPrice = combo.price; // Use stored manual price
+        } else {
+          finalPrice = await calculateComboPrice(pizzas, combo.discount);
+        }
 
         return {
           ...combo,
@@ -156,7 +174,7 @@ export const getComboOffer = async (req, res) => {
 export const editComboOffer = async (req, res) => {
   try {
     const { id } = req.body; // combo id
-    const { name, description, discount, pizzas } = req.body;
+    const { name, description, discount, pizzas, manualPrice } = req.body;
     const tempImageUrl = req.file ? req.file.filename : null;
 
     const existingCombo = await prisma.comboOffers.findUnique({
@@ -185,7 +203,19 @@ export const editComboOffer = async (req, res) => {
       }
     }
 
-    const finalPrice = await calculateComboPrice(parsedPizzas, discount);
+    // Determine final price based on pricing mode
+    let finalPrice;
+    let finalDiscount = 0;
+
+    if (manualPrice && Number(manualPrice) > 0) {
+      // Manual pricing mode
+      finalPrice = Number(manualPrice);
+      finalDiscount = 0; // No discount when using manual pricing
+    } else {
+      // Percentage discount mode
+      finalDiscount = Number(discount) || 0;
+      finalPrice = await calculateComboPrice(parsedPizzas, finalDiscount);
+    }
 
     const updatedCombo = await prisma.$transaction(async (tx) => {
       // If a new image was uploaded, delete the old one
@@ -199,7 +229,7 @@ export const editComboOffer = async (req, res) => {
         data: {
           name,
           description,
-          discount,
+          discount: finalDiscount,
           price: finalPrice,
           imageUrl: tempImageUrl || existingCombo.imageUrl,
         },

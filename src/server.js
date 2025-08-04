@@ -285,12 +285,12 @@
 //           customerName: name,
 //           paymentStatus: "PAID",
 //           paymentId: session.payment_intent,
-          
+
 //           // NEW: Add timing fields
 //           orderTiming: orderTiming || "asap",
 //           preorderDate: preorderDate || null,
 //           preorderTime: preorderTime || null,
-          
+
 //           orderItems: {
 //             create: cart.cartItems.map((item) => {
 //               console.log("Creating order item:", {
@@ -554,12 +554,12 @@
 //             customerName: name,
 //             paymentStatus: "PAID",
 //             paymentId: session.payment_intent,
-            
+
 //             // Add timing fields
 //             orderTiming: orderTiming || "asap",
 //             preorderDate: preorderDate || null,
 //             preorderTime: preorderTime || null,
-            
+
 //             orderItems: {
 //               create: cart.cartItems.map((item) => ({
 //                 pizzaId: item.isOtherItem ? null : item.pizzaId,
@@ -801,7 +801,7 @@ console.log("hited the server")
 
 // CORS options
 const corsOptions = {
-  origin: ["https://vino.circlepizzapizza.co.uk", "https://circlepizzapizza.co.uk","http://localhost:8080","http://localhost:3001"],
+  origin: ["https://addiscombepizza.co.uk", "https://ananth.addiscombepizza.co.uk","https://www.addiscombepizza.co.uk", "http://localhost:8080", "http://localhost:3001"],
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
@@ -831,166 +831,166 @@ app.post(
       return res.status(400).send(`Webhook Error: ${err.message}`);
     }
 
-   // Update the webhook section to add reward points
-// ...existing code...
+    // Update the webhook section to add reward points
+    // ...existing code...
 
-if (event.type === "checkout.session.completed") {
-  console.log("🎯 Processing checkout.session.completed event");
-  
-  const session = event.data.object;
+    if (event.type === "checkout.session.completed") {
+      console.log("🎯 Processing checkout.session.completed event");
 
-  const {
-    userId,
-    cartId,
-    deliveryMethod,
-    name,
-    address,
-    pickupTime,
-    totalAmount,
-    orderTiming,
-    preorderDate,
-    preorderTime,
-  } = session.metadata;
+      const session = event.data.object;
 
-  try {
-    // Fetch cart with all related data
-    const cart = await prisma.cart.findUnique({
-      where: { id: cartId },
-      include: {
-        user: true, // Include user data for phone number
-        cartItems: {
+      const {
+        userId,
+        cartId,
+        deliveryMethod,
+        name,
+        address,
+        pickupTime,
+        totalAmount,
+        orderTiming,
+        preorderDate,
+        preorderTime,
+      } = session.metadata;
+
+      try {
+        // Fetch cart with all related data
+        const cart = await prisma.cart.findUnique({
+          where: { id: cartId },
           include: {
-            pizza: true,
-            combo: true,
-            otherItem: true,
-            cartToppings: {
-              include: { topping: true },
-            },
-            cartIngredients: {
-              include: { ingredient: true },
+            user: true, // Include user data for phone number
+            cartItems: {
+              include: {
+                pizza: true,
+                combo: true,
+                otherItem: true,
+                cartToppings: {
+                  include: { topping: true },
+                },
+                cartIngredients: {
+                  include: { ingredient: true },
+                },
+              },
             },
           },
-        },
-      },
-    });
-    
-    console.log("Cart found:", cart);
+        });
 
-    if (!cart) {
-      throw new Error("Cart not found");
-    }
+        console.log("Cart found:", cart);
 
-    // Create order
-    const order = await prisma.order.create({
-      data: {
-        userId: userId,
-        status: "PENDING",
-        totalAmount: parseFloat(totalAmount),
-        deliveryMethod: deliveryMethod,
-        deliveryAddress: address || null,
-        pickupTime: pickupTime || null,
-        customerName: name,
-        paymentStatus: "PAID",
-        paymentId: session.payment_intent,
-        orderTiming: orderTiming || "asap",
-        preorderDate: preorderDate || null,
-        preorderTime: preorderTime || null,
-        orderItems: {
-          create: cart.cartItems.map((item) => ({
-            pizzaId: item.isOtherItem ? null : item.pizzaId,
-            comboId: item.isCombo ? item.comboId : null,
-            otherItemId: item.otherItemId,
-            quantity: item.quantity,
-            size: item.size,
-            price: item.finalPrice,
-            pizzaBase: item.pizzaBase || null, // Add pizzaBase field from cart item
-            isCombo: Boolean(item.isCombo),
-            isOtherItem: Boolean(item.isOtherItem),
-            orderToppings: {
-              create: !item.isOtherItem && !item.isCombo
-                ? item.cartToppings.map((t) => ({
-                  name: t.topping.name,
-                  price: t.topping.price,
-                  status: true,
-                  include: true,
-                  quantity: t.addedQuantity,
-                }))
-                : [],
-            },
-            orderIngredients: {
-              create: !item.isOtherItem && !item.isCombo
-                ? item.cartIngredients.map((i) => ({
-                  name: i.ingredient.name,
-                  price: i.ingredient.price,
-                  status: true,
-                  include: true,
-                  quantity: i.addedQuantity,
-                }))
-                : [],
-            },
-          })),
-        },
-      },
-    });
-
-    // ADD REWARD POINTS - 20% of total amount
-    const rewardPoints = Math.floor(parseFloat(totalAmount) * 0.10);
-    
-    await prisma.user.update({
-      where: { id: userId },
-      data: {
-        points: {
-          increment: rewardPoints
+        if (!cart) {
+          throw new Error("Cart not found");
         }
-      }
-    });
 
-    console.log(`✅ Order created and ${rewardPoints} reward points added to user ${userId}`);
+        // Create order
+        const order = await prisma.order.create({
+          data: {
+            userId: userId,
+            status: "PENDING",
+            totalAmount: parseFloat(totalAmount),
+            deliveryMethod: deliveryMethod,
+            deliveryAddress: address || null,
+            pickupTime: pickupTime || null,
+            customerName: name,
+            paymentStatus: "PAID",
+            paymentId: session.payment_intent,
+            orderTiming: orderTiming || "asap",
+            preorderDate: preorderDate || null,
+            preorderTime: preorderTime || null,
+            orderItems: {
+              create: cart.cartItems.map((item) => ({
+                pizzaId: item.isOtherItem ? null : item.pizzaId,
+                comboId: item.isCombo ? item.comboId : null,
+                otherItemId: item.otherItemId,
+                quantity: item.quantity,
+                size: item.size,
+                price: item.finalPrice,
+                pizzaBase: item.pizzaBase || null, // Add pizzaBase field from cart item
+                isCombo: Boolean(item.isCombo),
+                isOtherItem: Boolean(item.isOtherItem),
+                orderToppings: {
+                  create: !item.isOtherItem && !item.isCombo
+                    ? item.cartToppings.map((t) => ({
+                      name: t.topping.name,
+                      price: t.topping.price,
+                      status: true,
+                      include: true,
+                      quantity: t.addedQuantity,
+                    }))
+                    : [],
+                },
+                orderIngredients: {
+                  create: !item.isOtherItem && !item.isCombo
+                    ? item.cartIngredients.map((i) => ({
+                      name: i.ingredient.name,
+                      price: i.ingredient.price,
+                      status: true,
+                      include: true,
+                      quantity: i.addedQuantity,
+                    }))
+                    : [],
+                },
+              })),
+            },
+          },
+        });
 
-    // NOTIFICATION TO SHOP OWNER
-    if (twilioClient && twilioPhone) {
-      try {
-        console.log("🔔 Attempting to send notifications to shop owner...");
-        
-        // Format order details with all items for SMS
-        const formatOrderItems = () => {
-          return cart.cartItems.map((item, index) => {
-            let itemName = '';
-            let itemDetails = '';
-            
-            if (item.isOtherItem && item.otherItem) {
-              itemName = item.otherItem.name;
-              itemDetails = `${item.quantity}x ${itemName} - £${parseFloat(item.finalPrice).toFixed(2)}`;
-            } else if (item.isCombo && item.combo) {
-              itemName = item.combo.name;
-              itemDetails = `${item.quantity}x ${itemName} (${item.size}) - £${parseFloat(item.finalPrice).toFixed(2)}`;
-            } else if (item.pizza) {
-              itemName = item.pizza.name;
-              const baseInfo = item.pizzaBase ? ` | Base: ${item.pizzaBase}` : '';
-              
-              // Filter toppings to only show those with quantity > 0
-              const activeToppings = item.cartToppings.filter(t => t.addedQuantity > 0);
-              const activeIngredients = item.cartIngredients.filter(i => i.addedQuantity > 0);
-              
-              let modificationsInfo = '';
-              if (activeToppings.length > 0 || activeIngredients.length > 0) {
-                const toppingsText = activeToppings.map(t => `${t.topping.name}(${t.addedQuantity})`).join(', ');
-                const ingredientsText = activeIngredients.map(i => `${i.ingredient.name}(${i.addedQuantity})`).join(', ');
-                
-                const allModifications = [toppingsText, ingredientsText].filter(text => text.length > 0).join(', ');
-                if (allModifications) {
-                  modificationsInfo = ` | +${allModifications}`;
-                }
-              }
-              
-              itemDetails = `${item.quantity}x ${itemName} (${item.size})${baseInfo}${modificationsInfo} - £${parseFloat(item.finalPrice).toFixed(2)}`;
+        // ADD REWARD POINTS - 20% of total amount
+        const rewardPoints = Math.floor(parseFloat(totalAmount) * 0.10);
+
+        await prisma.user.update({
+          where: { id: userId },
+          data: {
+            points: {
+              increment: rewardPoints
             }
-            
-            return `${index + 1}. ${itemDetails}`;
-          }).join('\n');
-        };
+          }
+        });
 
-        const orderDetailsText = `
+        console.log(`✅ Order created and ${rewardPoints} reward points added to user ${userId}`);
+
+        // NOTIFICATION TO SHOP OWNER
+        if (twilioClient && twilioPhone) {
+          try {
+            console.log("🔔 Attempting to send notifications to shop owner...");
+
+            // Format order details with all items for SMS
+            const formatOrderItems = () => {
+              return cart.cartItems.map((item, index) => {
+                let itemName = '';
+                let itemDetails = '';
+
+                if (item.isOtherItem && item.otherItem) {
+                  itemName = item.otherItem.name;
+                  itemDetails = `${item.quantity}x ${itemName} - £${parseFloat(item.finalPrice).toFixed(2)}`;
+                } else if (item.isCombo && item.combo) {
+                  itemName = item.combo.name;
+                  itemDetails = `${item.quantity}x ${itemName} (${item.size}) - £${parseFloat(item.finalPrice).toFixed(2)}`;
+                } else if (item.pizza) {
+                  itemName = item.pizza.name;
+                  const baseInfo = item.pizzaBase ? ` | Base: ${item.pizzaBase}` : '';
+
+                  // Filter toppings to only show those with quantity > 0
+                  const activeToppings = item.cartToppings.filter(t => t.addedQuantity > 0);
+                  const activeIngredients = item.cartIngredients.filter(i => i.addedQuantity > 0);
+
+                  let modificationsInfo = '';
+                  if (activeToppings.length > 0 || activeIngredients.length > 0) {
+                    const toppingsText = activeToppings.map(t => `${t.topping.name}(${t.addedQuantity})`).join(', ');
+                    const ingredientsText = activeIngredients.map(i => `${i.ingredient.name}(${i.addedQuantity})`).join(', ');
+
+                    const allModifications = [toppingsText, ingredientsText].filter(text => text.length > 0).join(', ');
+                    if (allModifications) {
+                      modificationsInfo = ` | +${allModifications}`;
+                    }
+                  }
+
+                  itemDetails = `${item.quantity}x ${itemName} (${item.size})${baseInfo}${modificationsInfo} - £${parseFloat(item.finalPrice).toFixed(2)}`;
+                }
+
+                return `${index + 1}. ${itemDetails}`;
+              }).join('\n');
+            };
+
+            const orderDetailsText = `
 🍕 NEW ORDER RECEIVED! 🍕
 
 Order ID: ${order.id}
@@ -1010,61 +1010,61 @@ Status: PENDING
 Please prepare this order!
         `.trim();
 
-        // Shop owner's phone number (add this to your .env file)
-        const shopOwnerPhone = process.env.SHOP_OWNER_PHONE || '+447000000000';
-        
-        console.log(`📱 Sending SMS to: ${shopOwnerPhone}`);
-        console.log(`📞 From: ${twilioPhone}`);
+            // Shop owner's phone number (add this to your .env file)
+            const shopOwnerPhone = process.env.SHOP_OWNER_PHONE || '+447000000000';
 
-        // Send SMS notification to shop owner
-        const smsMessage = await twilioClient.messages.create({
-          body: orderDetailsText,
-          from: twilioPhone,
-          to: shopOwnerPhone
+            console.log(`📱 Sending SMS to: ${shopOwnerPhone}`);
+            console.log(`📞 From: ${twilioPhone}`);
+
+            // Send SMS notification to shop owner
+            const smsMessage = await twilioClient.messages.create({
+              body: orderDetailsText,
+              from: twilioPhone,
+              to: shopOwnerPhone
+            });
+
+            console.log(`📱 SMS sent to shop owner successfully! SID: ${smsMessage.sid}`);
+
+            // Make a call to shop owner with order summary
+            const callMessage = `Hello! You have a new order from ${name}. The order method is ${deliveryMethod} and the total amount is ${totalAmount} pounds. Please check your SMS for complete details. Thank you!`;
+
+            console.log(`📞 Making call to shop owner...`);
+
+            const call = await twilioClient.calls.create({
+              twiml: `<Response><Say voice="alice">${callMessage}</Say></Response>`,
+              from: twilioPhone,
+              to: shopOwnerPhone
+            });
+
+            console.log(`📞 Call made to shop owner successfully! SID: ${call.sid}`);
+
+          } catch (notificationError) {
+            console.error("❌ Error sending notifications to shop owner:", {
+              error: notificationError.message,
+              code: notificationError.code,
+              moreInfo: notificationError.moreInfo
+            });
+            // Don't fail the order if notification fails
+          }
+        } else {
+          console.warn("⚠️ Twilio not configured. Skipping SMS/Call notifications.");
+        }
+
+        // Clear the cart
+        await prisma.cart.update({
+          where: { id: cartId },
+          data: {
+            cartItems: { deleteMany: {} },
+            totalAmount: 0,
+          },
         });
 
-        console.log(`📱 SMS sent to shop owner successfully! SID: ${smsMessage.sid}`);
-
-        // Make a call to shop owner with order summary
-        const callMessage = `Hello! You have a new order from ${name}. The order method is ${deliveryMethod} and the total amount is ${totalAmount} pounds. Please check your SMS for complete details. Thank you!`;
-
-        console.log(`📞 Making call to shop owner...`);
-        
-        const call = await twilioClient.calls.create({
-          twiml: `<Response><Say voice="alice">${callMessage}</Say></Response>`,
-          from: twilioPhone,
-          to: shopOwnerPhone
-        });
-
-        console.log(`📞 Call made to shop owner successfully! SID: ${call.sid}`);
-
-      } catch (notificationError) {
-        console.error("❌ Error sending notifications to shop owner:", {
-          error: notificationError.message,
-          code: notificationError.code,
-          moreInfo: notificationError.moreInfo
-        });
-        // Don't fail the order if notification fails
+      } catch (error) {
+        console.error("❌ Error processing webhook:", error);
+        return res.status(500).send(`Error processing order: ${error.message}`);
       }
-    } else {
-      console.warn("⚠️ Twilio not configured. Skipping SMS/Call notifications.");
     }
-
-    // Clear the cart
-    await prisma.cart.update({
-      where: { id: cartId },
-      data: {
-        cartItems: { deleteMany: {} },
-        totalAmount: 0,
-      },
-    });
-
-  } catch (error) {
-    console.error("❌ Error processing webhook:", error);
-    return res.status(500).send(`Error processing order: ${error.message}`);
-  }
-}
-// ...existing code...
+    // ...existing code...
 
     res.json({ received: true });
   }
@@ -1080,7 +1080,7 @@ const verifyUserToken = (req, res, next) => {
   try {
     // Look for user token (not admin token)
     const userToken = req.cookies.userToken || req.cookies.authToken || req.cookies.token;
-    
+
     if (!userToken) {
       console.log("❌ No user token found in cookies");
       return res.status(401).json({ error: "User not authenticated. Please verify OTP first." });
@@ -1089,12 +1089,12 @@ const verifyUserToken = (req, res, next) => {
     try {
       const decoded = jwt.verify(userToken, JWT_SECRET);
       req.user = decoded;
-      
+
       console.log("✅ User authenticated:", {
         userId: decoded.userId,
         path: req.path
       });
-      
+
       next();
     } catch (jwtError) {
       console.error("❌ JWT verification failed:", jwtError.message);
@@ -1113,7 +1113,7 @@ app.post("/api/create-checkout-session", checkout);
 app.get("/api/user/meals-donated", verifyUserToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    
+
     // Get user's total spending from all paid orders
     const orders = await prisma.order.findMany({
       where: {
@@ -1132,7 +1132,7 @@ app.get("/api/user/meals-donated", verifyUserToken, async (req, res) => {
 
     // Calculate meals donated (10 pounds = 1 meal, only full meals count)
     const mealsDonatted = Math.floor(totalSpent / 10);
-    
+
     // Convert to decimal for display (e.g., 15 pounds = 1.5 displayed, but only 1 meal donated)
     const spendingProgress = totalSpent / 10;
 
