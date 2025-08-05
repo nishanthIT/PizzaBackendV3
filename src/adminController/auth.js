@@ -17,10 +17,7 @@ const ADMIN_CREDENTIALS = {
 
 export const login = async (req, res) => {
   const { username, password } = req.body;
-  console.log("input username:", username);
-  console.log("ADMIN_CREDENTIALS.username:", ADMIN_CREDENTIALS.username);
-  console.log("input password:", password);
-  console.log("ADMIN_CREDENTIALS.password:", ADMIN_CREDENTIALS.password);
+
 
   if (
     username === ADMIN_CREDENTIALS.username &&
