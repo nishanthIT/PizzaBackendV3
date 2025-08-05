@@ -1,15 +1,26 @@
 import jwt from "jsonwebtoken";
-
+import dotenv from 'dotenv';
+dotenv.config(); // or require('dotenv').config();
 const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-key-2024";
 
+const username = process.env.ADMIN_USERNAME;
+const password = process.env.ADMIN_PASSWORD ;
 
 const ADMIN_CREDENTIALS = {
-  username: process.env.ADMIN_USERNAME,
-  password: process.env.ADMIN_PASSWORD,
+  username: username,
+  password: password,
 };
+// const ADMIN_CREDENTIALS = {
+//   username: "123",
+//   password: "123",
+// };
 
 export const login = async (req, res) => {
   const { username, password } = req.body;
+  console.log("input username:", username);
+  console.log("ADMIN_CREDENTIALS.username:", ADMIN_CREDENTIALS.username);
+  console.log("input password:", password);
+  console.log("ADMIN_CREDENTIALS.password:", ADMIN_CREDENTIALS.password);
 
   if (
     username === ADMIN_CREDENTIALS.username &&
