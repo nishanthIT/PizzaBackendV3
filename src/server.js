@@ -801,7 +801,7 @@ console.log("hited the server")
 
 // CORS options
 const corsOptions = {
-  origin: ["https://addiscombepizza.co.uk", "https://ananth.addiscombepizza.co.uk","https://www.addiscombepizza.co.uk", "http://localhost:8080", "http://localhost:3001"],
+  origin: [`${process.env.FRONTEND}`, `${process.env.BACKEND_NAME}`, `${process.env.FRONTEND_WWW}`],
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],

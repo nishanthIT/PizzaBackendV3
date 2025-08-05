@@ -793,7 +793,7 @@ const verifyOtp = async (req, res) => {
         console.log('Generated token for new user:', token);
 
         const domain = process.env.NODE_ENV === 'production'
-          ? '.addiscombepizza.co.uk'
+          ? `${process.env.COOKIE_NAME}`
           : 'localhost';
 
         res.cookie('authToken', token, {
@@ -838,7 +838,7 @@ const verifyOtp = async (req, res) => {
     console.log('Generated token for existing user:', token);
 
     const domain = process.env.NODE_ENV === 'production'
-      ? '.addiscombepizza.co.uk'
+      ? `${process.env.COOKIE_NAME}`
       : 'localhost';
 
     res.cookie('authToken', token, {
@@ -922,7 +922,7 @@ const completeRegistration = async (req, res) => {
     const token = generateToken(user.id, user.phone);
 
     const domain = process.env.NODE_ENV === 'production'
-      ? '.addiscombepizza.co.uk'
+      ? `${process.env.COOKIE_NAME}`
       : 'localhost';
 
     res.cookie('authToken', token, {
