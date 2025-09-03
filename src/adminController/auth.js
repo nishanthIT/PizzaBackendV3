@@ -1,8 +1,23 @@
 import jwt from "jsonwebtoken";
 import dotenv from 'dotenv';
-dotenv.config(); // or require('dotenv').config();
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.join(__dirname, "../../.env") });
+
+// Debug logging
+console.log("Environment file path:", path.join(__dirname, "../../.env"));
+console.log("Raw env values:", {
+  ADMIN_USERNAME: process.env.ADMIN_USERNAME,
+  ADMIN_PASSWORD: process.env.ADMIN_PASSWORD,
+  JWT_SECRET: process.env.JWT_SECRET
+});
 const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-key-2024";
 
+console.log(process.env.JWT_SECRET)
 const username = process.env.ADMIN_USERNAME;
 const password = process.env.ADMIN_PASSWORD ;
 
@@ -17,7 +32,8 @@ const ADMIN_CREDENTIALS = {
 
 export const login = async (req, res) => {
   const { username, password } = req.body;
-
+ console.log("Login attempt:", { username, password });
+  console.log("Expected credentials:", ADMIN_CREDENTIALS);
 
   if (
     username === ADMIN_CREDENTIALS.username &&
