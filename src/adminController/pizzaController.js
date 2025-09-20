@@ -9,7 +9,7 @@ const addPizza = async (req, res) => {
       name,
       description,
       category,
-      sizes, // { "SMALL": 15, "MEDIUM": 18, "LARGE": 28 },
+      sizes, // { "MEDIUM": 15, "LARGE": 18, "SUPER_SIZE": 28 },
       toppings: toppingsStr,
       ingredients: ingredientsStr,
     } = req.body;

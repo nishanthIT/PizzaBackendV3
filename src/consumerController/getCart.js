@@ -33,6 +33,9 @@ export const getCart = async (req, res) => {
         cartItems: {
           include: {
             pizza: true,
+            combo: true,
+            comboStyleItem: true, // Add combo style item relation
+            otherItem: true,
             cartToppings: {
               include: {
                 topping: {
@@ -53,20 +56,82 @@ export const getCart = async (req, res) => {
     });
 
     if (cart) {
-      // Flatten the names
+      // Process cart items to resolve side/drink IDs for combo-style items
+      const processedCartItems = await Promise.all(
+        cart.cartItems.map(async (item) => {
+          let processedItem = {
+            ...item,
+            cartToppings: item.cartToppings.map((t) => ({
+              ...t,
+              name: t.topping.name,
+            })),
+            cartIngredients: item.cartIngredients.map((i) => ({
+              ...i,
+              name: i.ingredient.name,
+            })),
+          };
+
+          // Process combo-style items to resolve IDs to full objects
+          if (item.comboStyleItemId) {
+            let selectedSideObjects = [];
+            let selectedDrinkObjects = [];
+
+            // Resolve side IDs to full objects
+            if (item.selectedSides) {
+              try {
+                const sideIds = JSON.parse(item.selectedSides);
+                if (Array.isArray(sideIds) && sideIds.length > 0) {
+                  selectedSideObjects = await prisma.otherItem.findMany({
+                    where: {
+                      id: { in: sideIds },
+                    },
+                    select: {
+                      id: true,
+                      name: true,
+                      price: true,
+                      imageUrl: true,
+                    },
+                  });
+                }
+              } catch (e) {
+                console.error('Error parsing selectedSides:', e);
+              }
+            }
+
+            // Resolve drink IDs to full objects
+            if (item.selectedDrinks) {
+              try {
+                const drinkIds = JSON.parse(item.selectedDrinks);
+                if (Array.isArray(drinkIds) && drinkIds.length > 0) {
+                  selectedDrinkObjects = await prisma.otherItem.findMany({
+                    where: {
+                      id: { in: drinkIds },
+                    },
+                    select: {
+                      id: true,
+                      name: true,
+                      price: true,
+                      imageUrl: true,
+                    },
+                  });
+                }
+              } catch (e) {
+                console.error('Error parsing selectedDrinks:', e);
+              }
+            }
+
+            // Add resolved objects to the item
+            processedItem.selectedSideObjects = selectedSideObjects;
+            processedItem.selectedDrinkObjects = selectedDrinkObjects;
+          }
+
+          return processedItem;
+        })
+      );
+
       const flattenedCart = {
         ...cart,
-        cartItems: cart.cartItems.map((item) => ({
-          ...item,
-          cartToppings: item.cartToppings.map((t) => ({
-            ...t,
-            name: t.topping.name,
-          })),
-          cartIngredients: item.cartIngredients.map((i) => ({
-            ...i,
-            name: i.ingredient.name,
-          })),
-        })),
+        cartItems: processedCartItems,
       };
 
       res.status(200).json(flattenedCart);

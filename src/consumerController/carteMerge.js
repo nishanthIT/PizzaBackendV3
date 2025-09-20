@@ -695,6 +695,16 @@ function getSizeMultiplier(size) {
 
 // Enhanced item matching logic that considers pizzaBase
 function itemsMatch(existingItem, localItem) {
+  // For combo style items
+  if (localItem.comboStyleItemId) {
+    return existingItem.comboStyleItemId === localItem.comboStyleItemId &&
+           existingItem.size === localItem.size &&
+           existingItem.isMealDeal === (localItem.isMealDeal || false) &&
+           existingItem.selectedSides === (localItem.selectedSides || null) &&
+           existingItem.selectedDrinks === (localItem.selectedDrinks || null) &&
+           existingItem.sauce === (localItem.sauce || null);
+  }
+  
   // For combo items
   if (localItem.isCombo) {
     return existingItem.comboId === localItem.id && existingItem.isCombo;
@@ -702,7 +712,9 @@ function itemsMatch(existingItem, localItem) {
   
   // For other items
   if (localItem.isOtherItem) {
-    return existingItem.otherItemId === localItem.id && existingItem.isOtherItem;
+    return existingItem.otherItemId === localItem.id && 
+           existingItem.isOtherItem &&
+           existingItem.sauce === (localItem.sauce || null); // Include sauce in matching
   }
   
   // For pizza items - check pizza ID, size, pizzaBase, toppings, and ingredients
@@ -721,7 +733,8 @@ function itemsMatch(existingItem, localItem) {
       localItem.ingredients || []
     ) &&
     !existingItem.isCombo &&
-    !existingItem.isOtherItem
+    !existingItem.isOtherItem &&
+    !existingItem.comboStyleItemId
   );
 }
 
@@ -940,6 +953,48 @@ function normalizePizzaBase(pizzaBase) {
 async function calculateSecurePrice(localItem) {
   try {
     console.log(`🔒 SECURITY: Calculating secure price for item: ${localItem.title || localItem.name}`);
+    console.log("🔍 DEBUG - localItem structure:", {
+      comboStyleItemId: localItem.comboStyleItemId,
+      isCombo: localItem.isCombo,
+      isOtherItem: localItem.isOtherItem,
+      id: localItem.id,
+      pizzaId: localItem.pizzaId
+    });
+    
+    // For combo style items
+    if (localItem.comboStyleItemId) {
+      console.log(`🍗 Processing combo style item: ${localItem.comboStyleItemId}`);
+      const comboStyleItem = await prisma.comboStyleItem.findUnique({
+        where: { id: localItem.comboStyleItemId }
+      });
+      
+      if (!comboStyleItem || !comboStyleItem.isActive) {
+        throw new Error(`Combo style item not found: ${localItem.comboStyleItemId}`);
+      }
+      
+      // Parse size pricing
+      const sizePricing = typeof comboStyleItem.sizePricing === 'string' 
+        ? JSON.parse(comboStyleItem.sizePricing) 
+        : comboStyleItem.sizePricing;
+      
+      const size = localItem.size;
+      if (!sizePricing[size]) {
+        throw new Error(`Invalid size ${size} for combo style item ${localItem.comboStyleItemId}`);
+      }
+      
+      const sizeConfig = sizePricing[size];
+      let unitPrice;
+      
+      if (localItem.isMealDeal) {
+        unitPrice = parseFloat(sizeConfig.mealDealPrice || sizeConfig.basePrice);
+      } else {
+        unitPrice = parseFloat(sizeConfig.basePrice);
+      }
+      
+      const totalPrice = unitPrice * localItem.quantity;
+      console.log(`💰 Combo style item price calculated: £${totalPrice.toFixed(2)} (${localItem.quantity} x £${unitPrice.toFixed(2)})`);
+      return totalPrice;
+    }
     
     // For combo items
     if (localItem.isCombo) {
@@ -1018,11 +1073,11 @@ async function calculateSecurePrice(localItem) {
       console.log(`🍕 Pizza base: ${rawPizzaBase} (normalized: ${pizzaBase}), Static cost: £${baseCost.toFixed(2)}`);
     }
     
-    // Get base price from database - START WITH SMALL as frontend does
+    // Get base price from database - START WITH MEDIUM as new base
     const sizes = typeof pizza.sizes === "string" ? JSON.parse(pizza.sizes) : pizza.sizes;
-    let basePrice = Number(sizes.SMALL || 0); // ✅ Start with SMALL like frontend
+    let basePrice = Number(sizes.MEDIUM || 0); // ✅ Start with MEDIUM as new base
     
-    console.log(`🍕 Starting base price (SMALL): £${basePrice.toFixed(2)}`);
+    console.log(`🍕 Starting base price (MEDIUM): £${basePrice.toFixed(2)}`);
     
     // Calculate topping costs FIRST (before size adjustments) - Match frontend logic
     let toppingCost = 0;
@@ -1119,19 +1174,21 @@ async function calculateSecurePrice(localItem) {
     // NOW apply size adjustments like frontend - MATCH EXACT FRONTEND LOGIC
     switch (size) {
       case "Large":
-        // Add difference between MEDIUM and SMALL (like frontend)
-        finalPricePerItem += (Number(sizes.MEDIUM || 0) - Number(sizes.SMALL || 0));
-        console.log(`🍕 Large size adjustment: +£${(Number(sizes.MEDIUM || 0) - Number(sizes.SMALL || 0)).toFixed(2)}`);
+        // Use the actual LARGE price plus toppings/ingredients
+        const largePizzaBasePrice = Number(sizes.LARGE || 0);
+        finalPricePerItem = largePizzaBasePrice + toppingCost + ingredientCost;
+        console.log(`🍕 Large size base: £${largePizzaBasePrice.toFixed(2)}, total: £${finalPricePerItem.toFixed(2)}`);
         break;
       case "Super Size":
-        // Add difference between LARGE and SMALL (like frontend)
-        finalPricePerItem += (Number(sizes.LARGE || 0) - Number(sizes.SMALL || 0));
-        console.log(`🍕 Super Size adjustment: +£${(Number(sizes.LARGE || 0) - Number(sizes.SMALL || 0)).toFixed(2)}`);
+        // Use the actual SUPER_SIZE price plus toppings/ingredients
+        const superSizePizzaBasePrice = Number(sizes.SUPER_SIZE || 0);
+        finalPricePerItem = superSizePizzaBasePrice + toppingCost + ingredientCost;
+        console.log(`🍕 Super Size base: £${superSizePizzaBasePrice.toFixed(2)}, total: £${finalPricePerItem.toFixed(2)}`);
         break;
       case "Medium":
       default:
-        // Medium stays as calculated
-        console.log(`🍕 Medium size - no additional adjustment`);
+        // Medium uses the already calculated price (base + toppings + ingredients)
+        console.log(`🍕 Medium size - using calculated price: £${finalPricePerItem.toFixed(2)}`);
         break;
     }
     
@@ -1150,7 +1207,7 @@ async function calculateSecurePrice(localItem) {
     const finalPrice = finalPricePerItem * localItem.quantity;
     
     console.log(`🔒 SECURE CALCULATION COMPLETE (MATCHING FRONTEND):`);
-    console.log(`   Starting Base (SMALL): £${basePrice.toFixed(2)}`);
+    console.log(`   Starting Base (MEDIUM): £${basePrice.toFixed(2)}`);
     console.log(`   Toppings: £${toppingCost.toFixed(2)} (WITH ${sizeMultiplier}x multiplier for ${size})`);
     console.log(`   Ingredients: £${ingredientCost.toFixed(2)} (NO multiplier)`);
     console.log(`   After adjustments: £${tempPrice.toFixed(2)}`);
@@ -1266,7 +1323,7 @@ export default async function syncCart(req, res) {
     for (const validatedItem of validatedItems) {
       // Better handling of different item types
       let pizzaId = null;
-      if (!validatedItem.isCombo && !validatedItem.isOtherItem) {
+      if (!validatedItem.isCombo && !validatedItem.isOtherItem && !validatedItem.comboStyleItemId) {
         pizzaId = validatedItem.pizzaId || validatedItem.pizza?.id || validatedItem.id;
         if (!pizzaId) {
           console.warn("⚠️ Skipping pizza item with missing pizzaId:", validatedItem);
@@ -1320,12 +1377,35 @@ export default async function syncCart(req, res) {
         });
       } else {
         // Create new item with SECURE PRICE
-        if (validatedItem.isCombo) {
+        if (validatedItem.comboStyleItemId) {
+          // Handle combo style items
+          itemsToCreate.push({
+            cartId: cart.id,
+            comboStyleItemId: validatedItem.comboStyleItemId,
+            pizzaId: null,
+            comboId: null,
+            otherItemId: null,
+            size: validatedItem.size,
+            quantity: validatedItem.quantity,
+            basePrice: secureEachPrice,
+            finalPrice: securePrice,
+            pizzaBase: null,
+            isCombo: false,
+            isOtherItem: false,
+            isMealDeal: validatedItem.isMealDeal || false,
+            selectedSides: validatedItem.selectedSides || null,
+            selectedDrinks: validatedItem.selectedDrinks || null,
+            sauce: validatedItem.sauce || null,
+            toppings: [],
+            ingredients: [],
+          });
+        } else if (validatedItem.isCombo) {
           itemsToCreate.push({
             cartId: cart.id,
             comboId: validatedItem.id,
             pizzaId: null,
             otherItemId: null,
+            comboStyleItemId: null,
             size: "COMBO",
             quantity: validatedItem.quantity,
             basePrice: secureEachPrice,
@@ -1342,11 +1422,13 @@ export default async function syncCart(req, res) {
             otherItemId: validatedItem.id,
             pizzaId: null,
             comboId: null,
+            comboStyleItemId: null,
             size: "OTHER",
             quantity: validatedItem.quantity,
             basePrice: secureEachPrice,
             finalPrice: securePrice,
             pizzaBase: null,
+            sauce: validatedItem.sauce || null, // Add sauce support
             isCombo: false,
             isOtherItem: true,
             toppings: [],
@@ -1358,6 +1440,7 @@ export default async function syncCart(req, res) {
             pizzaId: pizzaId,
             comboId: null,
             otherItemId: null,
+            comboStyleItemId: null,
             size: validatedItem.size,
             quantity: validatedItem.quantity,
             basePrice: secureEachPrice,
@@ -1395,6 +1478,7 @@ export default async function syncCart(req, res) {
               pizzaId: item.pizzaId,
               comboId: item.comboId,
               otherItemId: item.otherItemId,
+              comboStyleItemId: item.comboStyleItemId, // Add combo style item support
               size: item.size,
               quantity: item.quantity,
               basePrice: item.basePrice,
@@ -1402,6 +1486,10 @@ export default async function syncCart(req, res) {
               pizzaBase: item.pizzaBase,
               isCombo: item.isCombo,
               isOtherItem: item.isOtherItem,
+              isMealDeal: item.isMealDeal, // Add meal deal flag
+              selectedSides: item.selectedSides, // Add sides selection
+              selectedDrinks: item.selectedDrinks, // Add drinks selection
+              sauce: item.sauce, // Add sauce selection
               cartToppings: {
                 create: item.toppings.map((t) => ({
                   toppingId: t.id,
@@ -1430,6 +1518,7 @@ export default async function syncCart(req, res) {
               pizzaId: item.pizzaId,
               comboId: item.comboId,
               otherItemId: item.otherItemId,
+              comboStyleItemId: item.comboStyleItemId, // Add combo style item support
               size: item.size,
               quantity: item.quantity,
               basePrice: item.basePrice,
@@ -1437,6 +1526,10 @@ export default async function syncCart(req, res) {
               pizzaBase: item.pizzaBase,
               isCombo: item.isCombo,
               isOtherItem: item.isOtherItem,
+              isMealDeal: item.isMealDeal, // Add meal deal flag
+              selectedSides: item.selectedSides, // Add sides selection
+              selectedDrinks: item.selectedDrinks, // Add drinks selection
+              sauce: item.sauce, // Add sauce selection
             },
           });
         }

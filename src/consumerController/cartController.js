@@ -2,6 +2,153 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 /**
+ * Add combo-style item to cart - supports sauce, sides, drinks selections
+ */
+const addComboStyleItemToCart = async (req, res) => {
+  try {
+    // Get identifiers from request (userId comes from auth middleware)
+    const userId = req.user?.id;
+    const sessionId = req.sessionId;
+
+    if (!userId && !sessionId) {
+      return res.status(400).json({ error: "Authentication required" });
+    }
+
+    const {
+      comboStyleItemId,
+      size,
+      quantity = 1,
+      sauce,
+      selectedSides = [], // Array of side IDs
+      selectedDrinks = [], // Array of drink IDs
+      isMealDeal = false,
+    } = req.body;
+
+    // Validate inputs
+    if (!comboStyleItemId || !size) {
+      return res.status(400).json({ error: "Combo style item ID and size are required" });
+    }
+
+    // Get combo style item with related data
+    const comboStyleItem = await prisma.comboStyleItem.findUnique({
+      where: { id: comboStyleItemId },
+    });
+
+    if (!comboStyleItem || !comboStyleItem.isActive) {
+      return res.status(404).json({ error: "Combo style item not found or inactive" });
+    }
+
+    // Parse size prices and meal deal config
+    let sizePricing, mealDealConfig, availableSauces;
+    try {
+      sizePricing = typeof comboStyleItem.sizePricing === 'string' 
+        ? JSON.parse(comboStyleItem.sizePricing) 
+        : comboStyleItem.sizePricing;
+      
+      mealDealConfig = typeof comboStyleItem.mealDealConfig === 'string'
+        ? JSON.parse(comboStyleItem.mealDealConfig)
+        : comboStyleItem.mealDealConfig;
+        
+      availableSauces = typeof comboStyleItem.availableSauces === 'string'
+        ? JSON.parse(comboStyleItem.availableSauces)
+        : comboStyleItem.availableSauces;
+    } catch (e) {
+      return res.status(500).json({ error: "Invalid combo style item data" });
+    }
+
+    if (!sizePricing[size]) {
+      return res.status(400).json({ error: "Invalid size selection" });
+    }
+
+    // Validate sauce selection
+    if (sauce && !availableSauces.includes(sauce)) {
+      return res.status(400).json({ error: "Invalid sauce selection" });
+    }
+
+    // Determine price based on meal deal selection
+    let basePrice;
+    if (isMealDeal && sizePricing[size].mealDealPrice) {
+      basePrice = sizePricing[size].mealDealPrice;
+    } else {
+      basePrice = sizePricing[size].basePrice;
+    }
+
+    // Validate sides and drinks if it's a meal deal
+    if (isMealDeal) {
+      const requiredSides = mealDealConfig[size]?.sideCount || 0;
+      const requiredDrinks = mealDealConfig[size]?.drinkCount || 0;
+
+      if (selectedSides.length !== requiredSides) {
+        return res.status(400).json({ 
+          error: `Meal deal requires exactly ${requiredSides} side(s), but ${selectedSides.length} provided` 
+        });
+      }
+
+      if (selectedDrinks.length !== requiredDrinks) {
+        return res.status(400).json({ 
+          error: `Meal deal requires exactly ${requiredDrinks} drink(s), but ${selectedDrinks.length} provided` 
+        });
+      }
+    }
+
+    // Calculate final price
+    const finalPrice = basePrice * quantity;
+
+    // Get or create cart
+    let cart = await prisma.cart.upsert({
+      where: userId ? { userId } : { sessionId },
+      update: {},
+      create: {
+        userId: userId || null,
+        sessionId: !userId ? sessionId : null,
+        totalAmount: 0,
+      },
+      include: { cartItems: true },
+    });
+
+    // Create cart item with combo style item data
+    const cartItem = await prisma.cartItem.create({
+      data: {
+        cartId: cart.id,
+        comboStyleItemId,
+        size,
+        quantity,
+        basePrice,
+        finalPrice,
+        sauce: sauce || null,
+        selectedSides: selectedSides.length > 0 ? JSON.stringify(selectedSides) : null,
+        selectedDrinks: selectedDrinks.length > 0 ? JSON.stringify(selectedDrinks) : null,
+        isMealDeal,
+        // Set flags for easier identification
+        isOtherItem: false,
+        isCombo: false,
+        isPeriPeri: false,
+      },
+      include: {
+        comboStyleItem: { select: { name: true, imageUrl: true } },
+      },
+    });
+
+    // Update cart total
+    await updateCartTotal(cart.id);
+
+    return res.status(201).json({
+      success: true,
+      message: "Combo style item added to cart",
+      cartItem: formatComboStyleCartItem(cartItem),
+      cartTotal: await getCartTotal(cart.id),
+    });
+  } catch (error) {
+    console.error("Add combo style item to cart error:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Internal server error",
+      details: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+};
+
+/**
  * Add item to cart - supports both guest users (with sessionId) and logged in users (with userId)
  */
 const addItemToCart = async (req, res) => {
@@ -405,8 +552,26 @@ function formatCartItem(cartItem) {
   };
 }
 
+function formatComboStyleCartItem(cartItem) {
+  return {
+    id: cartItem.id,
+    comboStyleItemId: cartItem.comboStyleItemId,
+    comboStyleItemName: cartItem.comboStyleItem.name,
+    comboStyleItemImage: cartItem.comboStyleItem.imageUrl,
+    size: cartItem.size,
+    quantity: cartItem.quantity,
+    basePrice: cartItem.basePrice,
+    finalPrice: cartItem.finalPrice,
+    sauce: cartItem.sauce,
+    selectedSides: cartItem.selectedSides ? JSON.parse(cartItem.selectedSides) : [],
+    selectedDrinks: cartItem.selectedDrinks ? JSON.parse(cartItem.selectedDrinks) : [],
+    isMealDeal: cartItem.isMealDeal,
+  };
+}
+
 export {
   addItemToCart,
+  addComboStyleItemToCart,
   removeCartItem,
   clearCart,
   getCartTotal,

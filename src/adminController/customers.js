@@ -22,14 +22,20 @@ export const getAllCustomers = async (req, res) => {
             customerName: true,
             orderItems: {
               select: {
-                pizza: { 
-                  select: { name: true } 
+                pizza: {
+                  select: { name: true }
                 },
-                otherItem: { 
-                  select: { name: true } 
+                otherItem: {
+                  select: { name: true }
                 },
-                combo: { 
-                  select: { name: true } 
+                combo: {
+                  select: { name: true }
+                },
+                periPeri: {
+                  select: { name: true }
+                },
+                comboStyleItem: {
+                  select: { name: true }
                 },
                 quantity: true,
                 price: true,
@@ -45,7 +51,7 @@ export const getAllCustomers = async (req, res) => {
 
     const formattedCustomers = customers.map(customer => {
       const totalSpent = customer.orders.reduce((sum, order) => sum + Number(order.totalAmount), 0);
-      
+
       return {
         id: customer.id,
         name: customer.name || customer.phone, // Fallback to phone if no name
@@ -57,7 +63,12 @@ export const getAllCustomers = async (req, res) => {
         joinDate: customer.created_at,
         orders: customer.orders.map(order => {
           const orderItems = order.orderItems.map(item => {
-            const itemName = item.pizza?.name || item.otherItem?.name || item.combo?.name || 'Unknown Item';
+            const itemName = item.pizza?.name ||
+              item.otherItem?.name ||
+              item.combo?.name ||
+              item.periPeri?.name ||
+              item.comboStyleItem?.name ||
+              'Unknown Item';
             return `${itemName} (${item.size}) x${item.quantity}`;
           }).join(', ');
 
@@ -102,6 +113,8 @@ export const getCustomerById = async (req, res) => {
                 pizza: true,
                 otherItem: true,
                 combo: true,
+                periPeri: true,
+                comboStyleItem: true,
                 orderToppings: true,
                 orderIngredients: true
               }
@@ -133,7 +146,40 @@ export const getCustomerById = async (req, res) => {
         id: order.id,
         date: order.createdAt.toISOString().split('T')[0],
         items: order.orderItems.map(item => {
-          const itemName = item.pizza?.name || item.otherItem?.name || item.combo?.name;
+          // Debug: Log key fields only
+          console.log(`Item IDs - Pizza: ${item.pizzaId}, Other: ${item.otherItemId}, Combo: ${item.comboId}, PeriPeri: ${item.periPeriId}, ComboStyle: ${item.comboStyleItemId}`);
+
+          // Try to get item name from various sources
+          let itemName = 'Unknown Item';
+
+          if (item.pizza?.name) {
+            itemName = item.pizza.name;
+          } else if (item.otherItem?.name) {
+            itemName = item.otherItem.name;
+          } else if (item.combo?.name) {
+            itemName = item.combo.name;
+          } else if (item.periPeri?.name) {
+            itemName = item.periPeri.name;
+          } else if (item.comboStyleItem?.name) {
+            itemName = item.comboStyleItem.name;
+          } else {
+            // Log when we can't find the name
+            console.log(`⚠️  Could not find item name for item with size: ${item.size}, IDs: pizza=${item.pizzaId}, other=${item.otherItemId}, combo=${item.comboId}, periPeri=${item.periPeriId}, comboStyle=${item.comboStyleItemId}`);
+
+            // Try to construct a meaningful name based on available info
+            if (item.comboStyleItemId) {
+              itemName = 'ComboStyle Item (Missing)';
+            } else if (item.periPeriId) {
+              itemName = 'PeriPeri Item (Missing)';
+            } else if (item.pizzaId) {
+              itemName = 'Pizza (Missing)';
+            } else if (item.otherItemId) {
+              itemName = 'Other Item (Missing)';
+            } else if (item.comboId) {
+              itemName = 'Combo (Missing)';
+            }
+          }
+
           return `${itemName} (${item.size}) x${item.quantity}`;
         }).join(', '),
         total: `£${Number(order.totalAmount).toFixed(2)}`,
@@ -236,9 +282,9 @@ export const deleteCustomer = async (req, res) => {
 export const getCustomerStats = async (req, res) => {
   try {
     const totalCustomers = await prisma.user.count();
-    
+
     const totalOrders = await prisma.order.count();
-    
+
     const totalRevenue = await prisma.order.aggregate({
       _sum: {
         totalAmount: true

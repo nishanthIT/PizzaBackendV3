@@ -405,11 +405,10 @@
 
 
 import Stripe from "stripe";
-import { PrismaClient } from "@prisma/client";
+import prisma from "../lib/prisma.js"; // Use singleton Prisma client
+import { prismaWithRetry } from "../lib/dbRetry.js";
 import jwt from "jsonwebtoken";
-
-// Initialize Prisma client
-const prisma = new PrismaClient();
+import { validateDeliveryPostcode } from '../services/postalCodeService.js';
 
 // Validate required environment variables
 if (!process.env.FRONTEND_URL) {
@@ -465,21 +464,24 @@ export default async function checkout(req, res) {
   try {
     const userId = req.user.userId; // Note: using userId from JWT token
 
-    // Get user's active cart from database
-    const userCart = await prisma.cart.findFirst({
-      where: { userId },
-      include: {
-        cartItems: {
-          include: {
-            pizza: true,
-            combo: true,
-            otherItem: true,
-            cartToppings: true,
-            cartIngredients: true,
+    // Get user's active cart from database with retry logic
+    const userCart = await prismaWithRetry(() => 
+      prisma.cart.findFirst({
+        where: { userId },
+        include: {
+          cartItems: {
+            include: {
+              pizza: true,
+              combo: true,
+              comboStyleItem: true, // Add combo style item relation
+              otherItem: true,
+              cartToppings: true,
+              cartIngredients: true,
+            },
           },
         },
-      },
-    });
+      })
+    );
 
     if (!userCart || userCart.cartItems.length === 0) {
       return res.status(400).json({ error: "No active cart found or cart is empty" });
@@ -492,11 +494,33 @@ export default async function checkout(req, res) {
       deliveryMethod,
       name,
       address,
+      postcode,
       pickupTime,
       orderTiming,
       preorderDate,
       preorderTime,
     } = req.body;
+
+    // Validate postcode if delivery method is selected
+    if (deliveryMethod === "delivery") {
+      if (!postcode) {
+        return res.status(400).json({ error: "Postcode is required for delivery orders" });
+      }
+
+      // Server-side postcode validation
+      const postcodeValidation = await validateDeliveryPostcode(postcode);
+      if (!postcodeValidation.isValid) {
+        return res.status(400).json({ 
+          error: `Invalid delivery area: ${postcodeValidation.error}`,
+          details: postcodeValidation 
+        });
+      }
+      
+      console.log("✅ Postcode validation passed:", {
+        postcode: postcodeValidation.postcode,
+        distance: postcodeValidation.distance
+      });
+    }
 
     // SECURE: Calculate delivery fee on backend (not trusting frontend)
     const deliveryFee = 3.95; // Fixed delivery fee
@@ -563,6 +587,7 @@ export default async function checkout(req, res) {
         deliveryMethod,
         name,
         address: address || "",
+        postcode: deliveryMethod === "delivery" ? postcode : "",
         pickupTime: pickupTime || "",
         totalAmount: Number(final_total).toString(),
         // Add timing fields
@@ -626,6 +651,7 @@ export async function handleStripeWebhook(req, res) {
               include: {
                 pizza: true,
                 combo: true,
+                comboStyleItem: true, // Add combo style item relation
                 otherItem: true,
                 cartToppings: { include: { topping: true } },
                 cartIngredients: { include: { ingredient: true } },
@@ -660,8 +686,13 @@ export async function handleStripeWebhook(req, res) {
                   isCombo: item.isCombo,
                   comboId: item.comboId,
                   pizzaId: item.pizzaId,
+                  comboStyleItemId: item.comboStyleItemId,
                   size: item.size,
                   finalPrice: item.finalPrice,
+                  isMealDeal: item.isMealDeal,
+                  selectedSides: item.selectedSides,
+                  selectedDrinks: item.selectedDrinks,
+                  sauce: item.sauce,
                 });
 
                 // Explicitly construct the order item
@@ -674,26 +705,43 @@ export async function handleStripeWebhook(req, res) {
                   pizzaId: null,
                   comboId: null,
                   otherItemId: null,
+                  comboStyleItemId: null, // Add combo style item ID
+                  // Add combo style item specific fields
+                  sauce: item.sauce || null,
+                  // Handle selectedSides and selectedDrinks properly
+                  selectedSides: item.selectedSides && item.selectedSides !== "[]" ? item.selectedSides : null,
+                  selectedDrinks: item.selectedDrinks && item.selectedDrinks !== "[]" ? item.selectedDrinks : null,
+                  isMealDeal: Boolean(item.isMealDeal),
+                  pizzaBase: item.pizzaBase || null,
                 };
 
                 // Important: Set IDs based on item type
-                if (item.isOtherItem && item.otherItemId) {
+                if (item.comboStyleItemId) {
+                  orderItem.comboStyleItemId = item.comboStyleItemId;
+                  // Reset other IDs
+                  orderItem.pizzaId = null;
+                  orderItem.comboId = null;
+                  orderItem.otherItemId = null;
+                } else if (item.isOtherItem && item.otherItemId) {
                   orderItem.otherItemId = item.otherItemId;
                   orderItem.isOtherItem = true;
                   // Reset other IDs
                   orderItem.pizzaId = null;
                   orderItem.comboId = null;
+                  orderItem.comboStyleItemId = null;
                 } else if (item.isCombo && item.comboId) {
                   orderItem.comboId = item.comboId;
                   orderItem.isCombo = true;
                   // Reset other IDs
                   orderItem.pizzaId = null;
                   orderItem.otherItemId = null;
+                  orderItem.comboStyleItemId = null;
                 } else if (item.pizzaId) {
                   orderItem.pizzaId = item.pizzaId;
                   // Reset other IDs
                   orderItem.comboId = null;
                   orderItem.otherItemId = null;
+                  orderItem.comboStyleItemId = null;
                 }
 
                 // Add debug log for final order item
@@ -702,10 +750,14 @@ export async function handleStripeWebhook(req, res) {
                   hasOtherItemId: Boolean(orderItem.otherItemId),
                   hasComboId: Boolean(orderItem.comboId),
                   hasPizzaId: Boolean(orderItem.pizzaId),
+                  hasComboStyleItemId: Boolean(orderItem.comboStyleItemId),
+                  selectedSides: orderItem.selectedSides,
+                  selectedDrinks: orderItem.selectedDrinks,
+                  isMealDeal: orderItem.isMealDeal,
                 });
 
                 // Handle toppings and ingredients only for pizzas
-                if (!orderItem.isOtherItem && !orderItem.isCombo) {
+                if (!orderItem.isOtherItem && !orderItem.isCombo && !orderItem.comboStyleItemId) {
                   orderItem.orderToppings = {
                     create: item.cartToppings.map((t) => ({
                       name: t.topping.name,
@@ -738,6 +790,7 @@ export async function handleStripeWebhook(req, res) {
               include: {
                 pizza: true,
                 combo: true,
+                comboStyleItem: true, // Add combo style item relation
                 otherItem: true,
                 orderToppings: true,
                 orderIngredients: true,

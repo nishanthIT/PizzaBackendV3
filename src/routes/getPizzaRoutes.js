@@ -26,6 +26,14 @@ import {
   getOtherItemById,
 } from "../consumerController/orderItemsUser.js";
 import { completeRegistration } from "../consumerController/otp.js";
+// Removed peri-peri imports - now using combo style items
+import {
+  getAllComboStyleItemsPublic,
+  getComboStyleItemByIdPublic,
+  getAvailableSidesPublic,
+  getAvailableDrinksPublic,
+  getAvailableSauces
+} from "../adminController/comboStyleItems.js";
 
 const router = express.Router();
 
@@ -67,5 +75,14 @@ router.get("/check-auth", authenticateUser, (req, res) => {
 // get other items by category
 router.get("/getOtherItemByCategory", getOtherItemByCategory);
 router.get("/getOtherItemById/:id", getOtherItemById);
+
+// All peri-peri functionality moved to combo style items system
+
+// New Combo Style Items (flexible replacement)
+router.get("/getComboStyleItems", getAllComboStyleItemsPublic);
+router.get("/getComboStyleItem/:id", getComboStyleItemByIdPublic);
+router.get("/getComboStyleItemSides", getAvailableSidesPublic);
+router.get("/getComboStyleItemDrinks", getAvailableDrinksPublic);
+router.get("/getAvailableSauces", getAvailableSauces);
 
 export default router;

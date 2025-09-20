@@ -762,12 +762,13 @@ import { verifyToken } from "./adminController/auth.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import getPizzaRoutes from "./routes/getPizzaRoutes.js";
 import cartRoutes from "./routes/cartRoutes.js";
+import postalCodeRoutes from "./routes/postalCodeRoutes.js";
 import checkout from "./checkoutControler/checkout.js";
+// import { rateLimitMiddleware } from "./middleware/rateLimiter.js";
 
 dotenv.config();
 
-import { PrismaClient } from "@prisma/client";
-const prisma = new PrismaClient();
+import prisma from "./lib/prisma.js"; // Use singleton Prisma client
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-key-2024";
@@ -801,7 +802,15 @@ console.log("hited the server")
 
 // CORS options
 const corsOptions = {
-  origin: [`${process.env.FRONTEND}`, `${process.env.BACKEND_NAME}`, `${process.env.FRONTEND_WWW}`],
+  origin: [
+    `${process.env.FRONTEND}`, 
+    `${process.env.BACKEND_NAME}`, 
+    `${process.env.FRONTEND_WWW}`,
+    "http://localhost:8080", // Admin frontend (current port)
+    "http://localhost:8082", // Admin frontend (alternative port)
+    "http://localhost:8081", // Alternative admin frontend port
+    "http://localhost:3001"  // User frontend
+  ],
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
@@ -810,6 +819,16 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use((req, res, next) => {
   console.log("🔥 Incoming request:", req.method, req.originalUrl, "Origin:", req.headers.origin);
+  
+  // Set CORS headers explicitly for preflight requests
+  res.header('Access-Control-Allow-Origin', req.headers.origin);
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  
+  // Add CSP headers to allow image loading
+  res.header('Content-Security-Policy', "default-src 'self'; img-src 'self' data: blob: http://localhost:3003; connect-src 'self' http://localhost:3003 ws://localhost:* wss://localhost:*; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.gpteng.co; style-src 'self' 'unsafe-inline';");
+  
   next();
 });
 app.options("*", cors(corsOptions));
@@ -900,10 +919,15 @@ app.post(
                 pizzaId: item.isOtherItem ? null : item.pizzaId,
                 comboId: item.isCombo ? item.comboId : null,
                 otherItemId: item.otherItemId,
+                comboStyleItemId: item.comboStyleItemId || null, // Add combo style item support
                 quantity: item.quantity,
                 size: item.size,
                 price: item.finalPrice,
                 pizzaBase: item.pizzaBase || null, // Add pizzaBase field from cart item
+                sauce: item.sauce || null, // Add sauce field
+                selectedSides: item.selectedSides || null, // Add selected sides
+                selectedDrinks: item.selectedDrinks || null, // Add selected drinks
+                isMealDeal: Boolean(item.isMealDeal), // Add meal deal flag
                 isCombo: Boolean(item.isCombo),
                 isOtherItem: Boolean(item.isOtherItem),
                 orderToppings: {
@@ -1158,17 +1182,89 @@ app.get("/api/user/meals-donated", verifyUserToken, async (req, res) => {
   }
 });
 
-// Serve static files
-app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+// Serve static files from uploads directory as /images
+app.use("/images", express.static(path.join(__dirname, "../uploads")));
 
-// Public routes
+// Public routes (add rate limiting only to heavy database operations)
 app.use("/api", getPizzaRoutes);
 app.use("/api", cartRoutes);
+app.use("/api/postcodes", postalCodeRoutes);
+
+// Combo style item sides and drinks endpoints for admin panel
+app.get("/getComboStyleItemSides", async (req, res) => {
+  try {
+    const sides = await prisma.otherItem.findMany({
+      where: {
+        category: { name: "Sides" }
+      },
+      select: {
+        id: true,
+        name: true,
+        price: true,
+        imageUrl: true
+      }
+    });
+
+    const drinks = await prisma.otherItem.findMany({
+      where: {
+        category: { name: "Drinks" }
+      },
+      select: {
+        id: true,
+        name: true,
+        price: true,
+        imageUrl: true
+      }
+    });
+    
+    res.json({ sides, drinks });
+  } catch (error) {
+    console.error("Error fetching combo style item sides and drinks:", error);
+    res.status(500).json({ error: "Failed to fetch sides and drinks" });
+  }
+});
+
+app.get("/getComboStyleItemDrinks", async (req, res) => {
+  try {
+    const drinks = await prisma.otherItem.findMany({
+      where: {
+        category: { name: "Drinks" }
+      },
+      select: {
+        id: true,
+        name: true,
+        price: true,
+        imageUrl: true
+      }
+    });
+    
+    res.json(drinks);
+  } catch (error) {
+    console.error("Error fetching combo style item drinks:", error);
+    res.status(500).json({ error: "Failed to fetch drinks" });
+  }
+});
 
 // Admin routes with ADMIN authentication
 app.use("/api/admin", verifyToken); // This uses admin auth
 app.use("/api", adminRoutes);
 
-app.listen(PORT, () => {
+app.listen(PORT, async() => {
   console.log(`Server is running on port ${PORT}`);
+  try {
+    console.log("🔄 Testing database connection...");
+    await prisma.$connect();
+    console.log("✅ Database connected successfully!");
+    
+    // Optional: Show some database info
+    const tables = await prisma.$queryRaw`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public'
+    `;
+    console.log(`📊 Database has ${tables.length} tables`);
+    
+  } catch (error) {
+    console.error("❌ Database connection failed:", error.message);
+  }
 });

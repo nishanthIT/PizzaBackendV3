@@ -19,16 +19,23 @@ const storage = multer.diskStorage({
     cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
-    // Determine if this is a pizza or combo upload based on the route
-    const isPizzaRoute =
-      req.originalUrl.includes("/addPizza") ||
-      req.originalUrl.includes("/updatePizza");
-    const entityType = isPizzaRoute ? "pizza" : "combo";
-    const entityId =
-      req.body.pizzaId ||
-      req.body.comboId ||
-      req.params.pizzaId ||
-      req.params.comboId;
+    // Determine entity type based on the route
+    let entityType = "other"; // default
+    let entityId = "undefined";
+
+    if (req.originalUrl.includes("/addPizza") || req.originalUrl.includes("/updatePizza")) {
+      entityType = "pizza";
+      entityId = req.body.pizzaId || req.params.pizzaId || "undefined";
+    } else if (req.originalUrl.includes("/addCombo") || req.originalUrl.includes("/updateCombo")) {
+      entityType = "combo";
+      entityId = req.body.comboId || req.params.comboId || "undefined";
+    } else if (req.originalUrl.includes("/comboStyleItems") || req.originalUrl.includes("/comboStyleItem")) {
+      entityType = "combostyle";
+      entityId = req.body.id || req.params.id || "undefined";
+    } else if (req.originalUrl.includes("/otherItems") || req.originalUrl.includes("/addOtherItem") || req.originalUrl.includes("/updateOtherItem")) {
+      entityType = "other";
+      entityId = req.body.otherItemId || req.params.otherItemId || req.body.id || req.params.id || "undefined";
+    }
 
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
     cb(

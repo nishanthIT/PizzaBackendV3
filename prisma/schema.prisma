@@ -8,9 +8,10 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// prisma/schema.prisma
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url  	    = env("DATABASE_URL")
 }
 
 model User {
@@ -48,6 +49,7 @@ model Pizza {
   createdAt    DateTime @default(now())
   orderItems    OrderItem[]
   comboPizzas   ComboPizza[]
+  comboItems    ComboItem[]    // New relation
   cartItems     CartItem[]
 }
 
@@ -60,6 +62,7 @@ model ComboOffers {
   price          Decimal
   createdAt      DateTime @default(now())
   pizzas         ComboPizza[]   
+  comboItems     ComboItem[]    // New relation
   cartItems      CartItem[]
   orderItems    OrderItem[]
 }
@@ -94,15 +97,24 @@ model CartItem {
    combo        ComboOffers? @relation(fields: [comboId], references: [id], onDelete: Cascade)
    otherItemId  String?
    otherItem    OtherItem? @relation(fields: [otherItemId], references: [id], onDelete: Cascade)
+   periPeriId   String?  // Add peri peri item support (deprecated)
+   periPeri     PeriPeriItem? @relation(fields: [periPeriId], references: [id], onDelete: Cascade)
+   comboStyleItemId String? // New flexible combo item support
+   comboStyleItem ComboStyleItem? @relation(fields: [comboStyleItemId], references: [id], onDelete: Cascade)
    size         String
    quantity     Int
    basePrice    Decimal
    finalPrice   Decimal
    pizzaBase    String?  // Add pizzaBase field
+   sauce        String?  // Add sauce field for other items like Peri Peri Chicken
+   isMealDeal   Boolean  @default(false) // Whether this is the meal deal version
+   selectedSides String? // JSON array of selected sides for meal deals
+   selectedDrinks String? // JSON array of selected drinks for meal deals
    cartToppings CartToppings[]     
    cartIngredients CartIngredients[] 
    isCombo      Boolean  @default(false)
    isOtherItem  Boolean  @default(false)
+   isPeriPeri   Boolean  @default(false)
    createdAt    DateTime @default(now())
 }
 
@@ -158,12 +170,21 @@ model OrderItem {
   combo           ComboOffers? @relation(fields: [comboId], references: [id])
   otherItemId     String?
   otherItem       OtherItem? @relation(fields: [otherItemId], references: [id])
+  periPeriId      String?  // Add peri peri item support (deprecated)
+  periPeri        PeriPeriItem? @relation(fields: [periPeriId], references: [id])
+  comboStyleItemId String? // New flexible combo item support
+  comboStyleItem  ComboStyleItem? @relation(fields: [comboStyleItemId], references: [id])
   size            String
   quantity        Int
   price           Decimal
   pizzaBase       String?  // Add pizzaBase field
+  sauce           String?  // Add sauce field for other items like Peri Peri Chicken
+  isMealDeal      Boolean  @default(false) // Whether this is the meal deal version
+  selectedSides   String? // JSON array of selected sides for meal deals
+  selectedDrinks  String? // JSON array of selected drinks for meal deals
   isCombo         Boolean  @default(false)
   isOtherItem     Boolean  @default(false)
+  isPeriPeri      Boolean  @default(false)
   orderToppings   OrderToppings[]
   orderIngredients OrderIngredients[]
   createdAt       DateTime @default(now())
@@ -240,6 +261,7 @@ model Category {
   name          String
   pizzas        Pizza[]  
   otherItems    OtherItem[]
+  comboStyleItems ComboStyleItem[] // Add relation to new combo style items
 }
 
 model OtherItem {
@@ -248,11 +270,73 @@ model OtherItem {
   description   String?
   imageUrl      String?
   price         Decimal
+  availableSauces String? // JSON array of available sauces for items like Peri Peri Chicken
   createdAt     DateTime @default(now())
   categoryId    String
   category      Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   cartItems     CartItem[]
   orderItems    OrderItem[]
+  comboItems    ComboItem[]    // New relation
+}
+
+model PeriPeriItem {
+  id            String   @id @default(cuid())
+  name          String   // e.g., "Quarter Peri-Peri Chicken", "Half Peri-Peri Chicken"
+  description   String?
+  imageUrl      String?
+  basePrice     Decimal  // Price on its own
+  mealDealPrice Decimal? // Price with sides and drinks (optional)
+  sideCount     Int      @default(0) // Number of sides included in meal deal
+  drinkCount    Int      @default(0) // Number of drinks included in meal deal
+  itemType      String   // "quarter", "half", "whole", "wings"
+  availableSauces String // JSON array of available sauces
+  createdAt     DateTime @default(now())
+  cartItems     CartItem[]
+  orderItems    OrderItem[]
+}
+
+// New flexible model for combo-style items (replaces PeriPeriItem)
+model ComboStyleItem {
+  id                String   @id @default(cuid())
+  name              String   // Base name like "Peri-Peri Chicken"
+  description       String?
+  imageUrl          String?
+  categoryId        String   // Links to category (like "Chicken")
+  category          Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  
+  // Size configuration (JSON: {"quarter": {"basePrice": 4.50, "mealDealPrice": 7.50}, "half": {...}})
+  sizePricing       Json     
+  
+  // Available options
+  availableSauces   Json     // Array of sauce options
+  
+  // Category IDs for fetching meal deal options from existing categories (temporarily commented)
+  // sidesCategoryId   String?  // Category ID to fetch sides from (e.g. "Sides" category)
+  // drinksCategoryId  String?  // Category ID to fetch drinks from (e.g. "Drinks" category)
+  
+  // Meal deal configuration per size
+  mealDealConfig    Json     // {"quarter": {"sideCount": 1, "drinkCount": 1}, "half": {...}}
+  
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  cartItems         CartItem[]
+  orderItems        OrderItem[]
+}
+
+// New model for flexible combo items
+model ComboItem {
+  id           String   @id @default(cuid())
+  comboId      String
+  pizzaId      String?
+  otherItemId  String?
+  quantity     Int
+  size         String?
+  itemType     String   @default("PIZZA") // "PIZZA" or "OTHER_ITEM"
+  combo        ComboOffers @relation(fields: [comboId], references: [id], onDelete: Cascade)
+  pizza        Pizza?      @relation(fields: [pizzaId], references: [id], onDelete: Cascade)
+  otherItem    OtherItem?  @relation(fields: [otherItemId], references: [id], onDelete: Cascade)
+  
+  @@unique([comboId, pizzaId, otherItemId, size])
 }
 
 enum OrderStatus {
@@ -263,7 +347,7 @@ enum OrderStatus {
 }
 
 enum PizzaSize {
-  SMALL
   MEDIUM
   LARGE
+  SUPER_SIZE
 }

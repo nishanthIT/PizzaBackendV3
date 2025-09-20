@@ -7,7 +7,7 @@ const addOtherItem = async (req, res) => {
   let tempImageUrl = req.file?.filename || "dummy.png";
 
   try {
-    const { name, description, category, price } = req.body;
+    const { name, description, category, price, availableSauces } = req.body;
 
     if (!name || !price || !category) {
       if (req.file) deleteFile(tempImageUrl);
@@ -34,6 +34,7 @@ const addOtherItem = async (req, res) => {
           price: Number(price),
           categoryId: category,
           imageUrl: tempImageUrl,
+          availableSauces: availableSauces || null,
         },
       });
       
@@ -72,7 +73,7 @@ const addOtherItem = async (req, res) => {
 
 const updateOtherItem = async (req, res) => {
   try {
-    const { id, name, category, description, price } = req.body;
+    const { id, name, category, description, price, availableSauces } = req.body;
     const tempImageUrl = req.file ? req.file.filename : null;
 
     if (!id) {
@@ -116,6 +117,7 @@ const updateOtherItem = async (req, res) => {
           price: price || existingItem.price,
           categoryId: category || existingItem.categoryId,
           imageUrl: tempImageUrl || existingItem.imageUrl,
+          availableSauces: availableSauces !== undefined ? availableSauces : existingItem.availableSauces,
         },
       });
 

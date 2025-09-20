@@ -45,6 +45,17 @@ import {
   getAllOtherItems,
   updateOtherItem,
 } from "../adminController/otherItems.js";
+// Removed peri-peri imports - now using combo style items
+import {
+  getAllComboStyleItems,
+  getComboStyleItemById,
+  createComboStyleItem,
+  updateComboStyleItem,
+  deleteComboStyleItem,
+  getAvailableSauces,
+  getAvailableSides,
+  getAvailableDrinks
+} from "../adminController/comboStyleItems.js";
 import {
   getAllCustomers,
   getCustomerById,
@@ -152,11 +163,24 @@ adminRouter.put(
 );
 adminRouter.delete("/deleteOtherItem/:id", deleteOtherItem);
 adminRouter.get("/getAllOtherItems", getAllOtherItems);
+adminRouter.get("/other-items", getAllOtherItems); // Add alternate endpoint for frontend
 
 // Admin orders
 adminRouter.get("/getOrderDetails/:id", getOrderDetails);
 adminRouter.get("/getAllOrders", getAllOrders);
 adminRouter.put("/changeOrderStatus/:id", changeOrderStatus);
+
+// All peri-peri functionality moved to combo style items system
+
+// New Combo Style Items (flexible replacement for Peri Peri)
+adminRouter.get("/comboStyleItems", getAllComboStyleItems);
+adminRouter.get("/comboStyleItems/:id", getComboStyleItemById);
+adminRouter.post("/comboStyleItems", upload.single("image"), convertToPng, createComboStyleItem);
+adminRouter.put("/comboStyleItems/:id", upload.single("image"), convertToPng, updateComboStyleItem);
+adminRouter.delete("/comboStyleItems/:id", deleteComboStyleItem);
+adminRouter.get("/sauces", getAvailableSauces);
+adminRouter.get("/sides", getAvailableSides);
+adminRouter.get("/drinks", getAvailableDrinks);
 
 // Mount the admin router under /admin path
 router.use("/admin", adminRouter);
