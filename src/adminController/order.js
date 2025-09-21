@@ -196,6 +196,7 @@ const getAllOrders = async (req, res) => {
               pizza: true,
               combo: true,
               comboStyleItem: true, // Add combo style item relation
+              otherItem: true, // Add other item relation
               orderToppings: true,
               orderIngredients: true,
             },
