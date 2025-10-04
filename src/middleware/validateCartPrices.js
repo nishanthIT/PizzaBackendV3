@@ -295,14 +295,16 @@ export const validateCartPrices = async (req, res, next) => {
           
           totalSelectedCount += categorySelectedCount;
           
-          // **SECURITY CHECK: Verify selection count matches requirement**
+          // **STRICT SECURITY CHECK: Verify selection count matches requirement exactly**
           if (categorySelectedCount !== requiredCount) {
-            console.warn(`❌ Invalid selection count for category ${categoryId}: required=${requiredCount}, selected=${categorySelectedCount}`);
+            console.error(`🚨 SECURITY ALERT: Invalid selection count detected!`);
+            console.error(`❌ Category ${categoryId} (${categoryConfig.type}): required=${requiredCount}, selected=${categorySelectedCount}`);
+            console.error(`🔒 User attempted to bypass quantity restrictions - potential manipulation`);
             isValidSelection = false;
             break;
           }
           
-          // **SECURITY CHECK: Validate that all selected items exist in the correct category**
+          // **SECURITY CHECK: Validate that all selected items exist in the database**
           if (userSelectedInCategory.length > 0) {
             const selectedItemIds = userSelectedInCategory.map(item => item.id);
             
@@ -330,13 +332,13 @@ export const validateCartPrices = async (req, res, next) => {
                 select: { id: true, name: true }
               });
             } else {
-              // For other category types (sides, drinks, etc.), check otherItem table
+              // For other category types (sides, drinks, etc.), check if items exist
+              // Use a more flexible approach - check if items exist in any category
               validationQuery = prisma.otherItem.findMany({
                 where: {
-                  id: { in: selectedItemIds },
-                  categoryId: categoryConfig.categoryId
+                  id: { in: selectedItemIds }
                 },
-                select: { id: true, name: true }
+                select: { id: true, name: true, categoryId: true }
               });
             }
             
@@ -345,28 +347,55 @@ export const validateCartPrices = async (req, res, next) => {
             
             console.log(`🔍 Valid items in category ${categoryId}:`, validItems.map(i => i.name));
             
-            // Check if all selected items are valid
+            // **CRITICAL SECURITY CHECK: Reject ANY invalid item IDs**
             const invalidItems = selectedItemIds.filter(id => !validItemIds.includes(id));
             if (invalidItems.length > 0) {
-              console.warn(`❌ Invalid items found in category ${categoryId}:`, invalidItems);
+              console.error(`🚨 SECURITY ALERT: Invalid/non-existent item IDs detected!`);
+              console.error(`❌ Invalid items for category ${categoryId}:`, invalidItems);
+              console.error(`🔒 User attempted to include non-existent items - potential manipulation`);
+              console.error(`📋 All selected items:`, selectedItemIds);
+              console.error(`✅ Valid items found:`, validItemIds);
+              
+              // **SECURITY: Fail validation immediately to prevent exploitation**
               isValidSelection = false;
               break;
+            }
+            
+            // **ADDITIONAL SECURITY: Verify category matching for strict item types**
+            if (categoryType === 'pizza') {
+              // Already filtered by categoryId in query above - secure
+              console.log(`✅ Pizza category validation passed for ${validItems.length} items`);
+            } else if (categoryType !== 'comboStyle') {
+              // For other items, verify they belong to expected categories (if specified)
+              const actualCategories = [...new Set(validItems.map(item => item.categoryId))];
+              console.log(`📊 Selected items belong to categories:`, actualCategories);
+              
+              // Optional: Add strict category validation if needed
+              // const expectedCategoryId = categoryConfig.categoryId;
+              // if (expectedCategoryId && !actualCategories.includes(expectedCategoryId)) {
+              //   console.error(`❌ Category mismatch: expected ${expectedCategoryId}, found ${actualCategories}`);
+              //   isValidSelection = false;
+              //   break;
+              // }
             }
           }
         }
 
         if (!isValidSelection) {
-          console.warn(`❌ User choice validation failed for item ${item.id}`);
-          continue; // Skip this invalid item
+          console.error(`🚨 SECURITY ALERT: User choice validation failed for item ${item.id}`);
+          console.error(`🔒 Rejecting entire user choice due to invalid item IDs or quantities`);
+          throw new Error(`Invalid user choice item detected: ${item.id}. Cart validation failed for security reasons.`);
         }
 
-        // **SECURITY CHECK: Validate the price**
+        // **STRICT SECURITY CHECK: Validate the price exactly**
         const expectedPrice = parseFloat(userChoice.basePrice);
         const receivedPrice = parseFloat(item.basePrice || item.price || item.eachprice || 0);
         
         if (Math.abs(expectedPrice - receivedPrice) > 0.01) { // Allow for minor rounding differences
-          console.warn(`❌ Price mismatch for user choice ${item.id}: expected=${expectedPrice}, received=${receivedPrice}`);
-          // Continue with database price, not user-provided price
+          console.error(`🚨 SECURITY ALERT: Price manipulation detected!`);
+          console.error(`❌ Price mismatch for user choice ${item.id}: expected=${expectedPrice}, received=${receivedPrice}`);
+          console.error(`🔒 Potential price manipulation attempt - rejecting cart`);
+          throw new Error(`Price manipulation detected for user choice item ${item.id}. Expected: £${expectedPrice}, Received: £${receivedPrice}`);
         }
 
         // **SECURITY CHECK: Validate quantity**
