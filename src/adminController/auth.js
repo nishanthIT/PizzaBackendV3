@@ -13,7 +13,8 @@ console.log("Environment file path:", path.join(__dirname, "../../.env"));
 console.log("Raw env values:", {
   ADMIN_USERNAME: process.env.ADMIN_USERNAME,
   ADMIN_PASSWORD: process.env.ADMIN_PASSWORD,
-  JWT_SECRET: process.env.JWT_SECRET
+  JWT_SECRET: process.env.JWT_SECRET,
+  GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY ? `${process.env.GOOGLE_MAPS_API_KEY.substring(0, 10)}...` : 'undefined'
 });
 const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-key-2024";
 

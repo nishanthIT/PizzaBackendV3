@@ -63,6 +63,7 @@ const getOrderDetails = async (req, res) => {
               pizza: true,
               combo: true,
               comboStyleItem: true,
+              userChoice: true, // Add user choice relation
               orderToppings: true,
               otherItem: true, 
               orderIngredients: true,
@@ -76,10 +77,29 @@ const getOrderDetails = async (req, res) => {
       return res.status(404).json({ message: "Order not found" });
     }
 
+    // Debug: Log the raw order data
+    console.log('🔍 Raw order data:', {
+      orderId: order.id,
+      orderItemsCount: order.orderItems.length,
+      orderItems: order.orderItems.map(item => ({
+        id: item.id,
+        userChoiceId: item.userChoiceId,
+        userChoiceSelections: item.userChoiceSelections,
+        pizzaId: item.pizzaId,
+        comboId: item.comboId,
+        otherItemId: item.otherItemId,
+        comboStyleItemId: item.comboStyleItemId,
+        userChoice: item.userChoice ? { id: item.userChoice.id, name: item.userChoice.name } : null
+      }))
+    });
+
     // Collect all unique item IDs from all order items
     const allItemIds = new Set();
+    const allPizzaIds = new Set();
+    const allUserChoiceIds = new Set();
     
     order.orderItems.forEach(orderItem => {
+      // Handle combo style meal deals
       if (orderItem.isMealDeal) {
         try {
           if (orderItem.selectedSides) {
@@ -98,10 +118,38 @@ const getOrderDetails = async (req, res) => {
           console.error('Error parsing JSON for order item:', orderItem.id, parseError);
         }
       }
+
+      // **NEW: Handle user choice items**
+      if (orderItem.userChoiceId && orderItem.userChoiceSelections) {
+        allUserChoiceIds.add(orderItem.userChoiceId);
+        try {
+          const selections = JSON.parse(orderItem.userChoiceSelections);
+          Object.values(selections).forEach(categoryItems => {
+            if (Array.isArray(categoryItems)) {
+              categoryItems.forEach(item => {
+                if (item.id) {
+                  // Determine if it's a pizza or other item based on item structure
+                  if (item.sizes) {
+                    allPizzaIds.add(item.id);
+                  } else {
+                    allItemIds.add(item.id);
+                  }
+                }
+              });
+            }
+          });
+        } catch (parseError) {
+          console.error('Error parsing user choice selections for order item:', orderItem.id, parseError);
+        }
+      }
     });
 
-    // Fetch all items in a single query
+    // Fetch all items in separate queries
     let itemsMap = new Map();
+    let pizzasMap = new Map();
+    let userChoicesMap = new Map();
+    
+    // Fetch other items (sides, drinks, etc.)
     if (allItemIds.size > 0) {
       const items = await prisma.otherItem.findMany({
         where: {
@@ -120,11 +168,54 @@ const getOrderDetails = async (req, res) => {
       });
     }
 
+    // **NEW: Fetch pizzas**
+    if (allPizzaIds.size > 0) {
+      const pizzas = await prisma.pizza.findMany({
+        where: {
+          id: {
+            in: Array.from(allPizzaIds)
+          }
+        },
+        select: {
+          id: true,
+          name: true,
+          description: true
+        }
+      });
+      
+      pizzas.forEach(pizza => {
+        pizzasMap.set(pizza.id, pizza);
+      });
+    }
+
+    // **NEW: Fetch user choices**
+    if (allUserChoiceIds.size > 0) {
+      const userChoices = await prisma.userChoice.findMany({
+        where: {
+          id: {
+            in: Array.from(allUserChoiceIds)
+          }
+        },
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          categoryConfigs: true
+        }
+      });
+      
+      userChoices.forEach(userChoice => {
+        userChoicesMap.set(userChoice.id, userChoice);
+      });
+    }
+
     // Process order items to add selectedSidesNames and selectedDrinksNames
     const processedOrderItems = order.orderItems.map(orderItem => {
       let selectedSidesNames = [];
       let selectedDrinksNames = [];
+      let userChoiceDetails = null;
 
+      // Handle combo style meal deals
       if (orderItem.isMealDeal) {
         try {
           // Get selected sides names
@@ -151,10 +242,77 @@ const getOrderDetails = async (req, res) => {
         }
       }
 
+      // **NEW: Handle user choice items**
+      if (orderItem.userChoiceId && orderItem.userChoiceSelections) {
+        try {
+          const userChoice = userChoicesMap.get(orderItem.userChoiceId);
+          const selections = JSON.parse(orderItem.userChoiceSelections);
+          
+          if (userChoice) {
+            const categoryConfigs = typeof userChoice.categoryConfigs === 'string' 
+              ? JSON.parse(userChoice.categoryConfigs) 
+              : userChoice.categoryConfigs || [];
+
+            const selectedItemsByCategory = {};
+            
+            Object.keys(selections).forEach(categoryId => {
+              const categoryItems = selections[categoryId] || [];
+              const categoryConfig = categoryConfigs.find(config => config.categoryId === categoryId);
+              
+              if (categoryConfig) {
+                selectedItemsByCategory[categoryConfig.type || categoryConfig.categoryName || 'Unknown'] = 
+                  categoryItems.map(item => {
+                    let itemName = 'Unknown Item';
+                    if (item.sizes) {
+                      // Pizza item
+                      const pizza = pizzasMap.get(item.id);
+                      itemName = pizza ? pizza.name : item.name || 'Unknown Pizza';
+                    } else {
+                      // Other item
+                      itemName = itemsMap.get(item.id) || item.name || 'Unknown Item';
+                    }
+                    
+                    return {
+                      name: itemName,
+                      quantity: item.quantity || 1
+                    };
+                  });
+              }
+            });
+
+            userChoiceDetails = {
+              name: userChoice.name,
+              description: userChoice.description,
+              selectedItems: selectedItemsByCategory
+            };
+          }
+        } catch (parseError) {
+          console.error('Error parsing user choice selections for order item:', orderItem.id, parseError);
+        }
+      } 
+      // **FALLBACK: Handle orphaned user choice items (items with no identifiers)**
+      else if (!orderItem.pizzaId && !orderItem.comboId && !orderItem.otherItemId && 
+               !orderItem.comboStyleItemId && !orderItem.userChoiceId &&
+               orderItem.price && parseFloat(orderItem.price) > 50) {
+        // This looks like an orphaned user choice item
+        console.log('🔧 Found orphaned user choice item:', orderItem.id, 'price:', orderItem.price);
+        userChoiceDetails = {
+          name: 'User Choice Deal',
+          description: 'Custom meal deal selection',
+          selectedItems: {
+            'Unknown': [{
+              name: 'Selected items not available (legacy order)',
+              quantity: 1
+            }]
+          }
+        };
+      }
+
       return {
         ...orderItem,
         selectedSidesNames,
-        selectedDrinksNames
+        selectedDrinksNames,
+        userChoiceDetails // Add user choice details
       };
     });
 
@@ -196,6 +354,7 @@ const getAllOrders = async (req, res) => {
               pizza: true,
               combo: true,
               comboStyleItem: true, // Add combo style item relation
+              userChoice: true, // Add user choice relation
               otherItem: true, // Add other item relation
               orderToppings: true,
               orderIngredients: true,

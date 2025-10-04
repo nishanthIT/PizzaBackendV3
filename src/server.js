@@ -763,7 +763,13 @@ import adminRoutes from "./routes/adminRoutes.js";
 import getPizzaRoutes from "./routes/getPizzaRoutes.js";
 import cartRoutes from "./routes/cartRoutes.js";
 import postalCodeRoutes from "./routes/postalCodeRoutes.js";
+import deliveryRoutes from "./routes/delivery.js";
 import checkout from "./checkoutControler/checkout.js";
+import { 
+  getAllUserChoicesPublic, 
+  getUserChoiceByIdPublic, 
+  getUserChoiceItems 
+} from "./consumerController/userChoicePublic.js";
 // import { rateLimitMiddleware } from "./middleware/rateLimiter.js";
 
 dotenv.config();
@@ -882,6 +888,8 @@ app.post(
                 pizza: true,
                 combo: true,
                 otherItem: true,
+                comboStyleItem: true, // Add combo style item relation
+                userChoice: true, // Add user choice relation
                 cartToppings: {
                   include: { topping: true },
                 },
@@ -920,6 +928,8 @@ app.post(
                 comboId: item.isCombo ? item.comboId : null,
                 otherItemId: item.otherItemId,
                 comboStyleItemId: item.comboStyleItemId || null, // Add combo style item support
+                userChoiceId: item.userChoiceId || null, // Add user choice support
+                userChoiceSelections: item.userChoiceSelections || null, // Add user choice selections
                 quantity: item.quantity,
                 size: item.size,
                 price: item.finalPrice,
@@ -1247,6 +1257,15 @@ app.get("/getComboStyleItemDrinks", async (req, res) => {
 
 // Admin routes with ADMIN authentication
 app.use("/api/admin", verifyToken); // This uses admin auth
+
+// UserChoice public endpoints (under /api for consistency)
+app.get("/api/getUserChoices", getAllUserChoicesPublic);
+app.get("/api/getUserChoice/:id", getUserChoiceByIdPublic);
+app.get("/api/getUserChoiceItems", getUserChoiceItems);
+
+// Delivery routes (public endpoints)
+app.use("/api/delivery", deliveryRoutes);
+
 app.use("/api", adminRoutes);
 
 app.listen(PORT, async() => {

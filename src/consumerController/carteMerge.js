@@ -1025,6 +1025,32 @@ async function calculateSecurePrice(localItem) {
       console.log(`💰 Other item price calculated: £${otherPrice.toFixed(2)}`);
       return otherPrice;
     }
+
+    // **NEW: For user choice items**
+    if (localItem.type === 'userChoice') {
+      console.log(`🎯 Processing user choice item: ${localItem.id}`);
+      const userChoice = await prisma.userChoice.findUnique({
+        where: { id: localItem.id }
+      });
+      
+      if (!userChoice || !userChoice.isActive) {
+        throw new Error(`User choice not found: ${localItem.id}`);
+      }
+      
+      // Validate price hasn't been tampered with
+      const expectedPrice = Number(userChoice.basePrice);
+      const clientPrice = Number(localItem.price || localItem.totalPrice || localItem.basePrice);
+      
+      if (Math.abs(expectedPrice - clientPrice) > 0.01) {
+        console.warn(`🚨 SECURITY ALERT: Price mismatch for user choice ${userChoice.name}`);
+        console.warn(`   Expected: £${expectedPrice}, Client sent: £${clientPrice}`);
+        throw new Error(`Price validation failed for user choice: ${userChoice.name}`);
+      }
+      
+      const userChoicePrice = expectedPrice * localItem.quantity;
+      console.log(`💰 User choice price calculated: £${userChoicePrice.toFixed(2)} (${localItem.quantity} x £${expectedPrice})`);
+      return userChoicePrice;
+    }
     
     // For pizza items - SECURE CALCULATION MATCHING FRONTEND
     const pizzaId = localItem.pizzaId || localItem.pizza?.id || localItem.id;
@@ -1399,6 +1425,30 @@ export default async function syncCart(req, res) {
             toppings: [],
             ingredients: [],
           });
+        } else if (validatedItem.type === 'userChoice') {
+          // **NEW: Handle user choice items**
+          itemsToCreate.push({
+            cartId: cart.id,
+            pizzaId: null,
+            comboId: null,
+            otherItemId: null,
+            comboStyleItemId: null,
+            userChoiceId: validatedItem.id, // Use userChoiceId instead of type
+            userChoiceSelections: JSON.stringify(validatedItem.selectedItems || {}), // Store as JSON string
+            size: validatedItem.size || 'Regular',
+            quantity: validatedItem.quantity,
+            basePrice: secureEachPrice,
+            finalPrice: securePrice,
+            pizzaBase: null,
+            isCombo: false,
+            isOtherItem: false,
+            isMealDeal: false,
+            selectedSides: null,
+            selectedDrinks: null,
+            sauce: null,
+            toppings: [],
+            ingredients: [],
+          });
         } else if (validatedItem.isCombo) {
           itemsToCreate.push({
             cartId: cart.id,
@@ -1519,6 +1569,9 @@ export default async function syncCart(req, res) {
               comboId: item.comboId,
               otherItemId: item.otherItemId,
               comboStyleItemId: item.comboStyleItemId, // Add combo style item support
+              // **NEW: Add user choice item support**
+              userChoiceId: item.userChoiceId, // Use userChoiceId field
+              userChoiceSelections: item.userChoiceSelections, // Use userChoiceSelections field
               size: item.size,
               quantity: item.quantity,
               basePrice: item.basePrice,

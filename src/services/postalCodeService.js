@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { getDistance } from 'geolib';
+import { Client } from '@googlemaps/google-maps-services-js';
 
 // Restaurant location (example coordinates for Croydon - update with actual restaurant location)
 const RESTAURANT_LOCATION = {
@@ -133,33 +134,85 @@ export const calculateDeliveryDistance = async (deliveryPostcode) => {
 };
 
 /**
- * Validate if a postcode is within delivery range
+ * Validate if a postcode is within delivery range using Google Maps API
  * @param {string} postcode - Customer's postcode
  * @returns {Object} - Validation result
  */
 export const validateDeliveryPostcode = async (postcode) => {
   try {
-    const result = await calculateDeliveryDistance(postcode);
-    
-    if (!result.isValid) {
-      return result;
+    // Check if Google Maps API key is configured
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+    if (!apiKey || apiKey === 'your_google_maps_api_key_here') {
+      console.log('⚠️  Google Maps API key not configured, using fallback validation');
+      
+      // Fallback to old system if Google Maps API not configured
+      const result = await calculateDeliveryDistance(postcode);
+      
+      if (!result.isValid) {
+        return result;
+      }
+
+      if (!result.isWithinRange) {
+        return {
+          isValid: false,
+          error: `Sorry, we don't deliver to ${postcode}. This location is ${result.distanceKm}km away, but we only deliver within ${result.maxDistanceKm}km of our restaurant.`,
+          distance: result.distanceKm,
+          maxDistance: result.maxDistanceKm
+        };
+      }
+
+      return {
+        isValid: true,
+        message: `Great! We deliver to ${result.postcode}. Distance: ${result.distanceKm}km`,
+        distance: result.distanceKm,
+        postcode: result.postcode
+      };
     }
 
-    if (!result.isWithinRange) {
+    // Use Google Maps API for accurate distance calculation
+    const client = new Client({});
+    const RESTAURANT_ADDRESS = "274 Lower Addiscombe Road, Croydon CR0 7AE, UK";
+    
+    const response = await client.distancematrix({
+      params: {
+        origins: [RESTAURANT_ADDRESS],
+        destinations: [postcode],
+        units: 'imperial', // Get distances in miles
+        mode: 'driving',
+        key: apiKey
+      }
+    });
+
+    const element = response.data.rows[0].elements[0];
+    
+    if (element.status !== 'OK') {
       return {
         isValid: false,
-        error: `Sorry, we don't deliver to ${postcode}. This location is ${result.distanceKm}km away, but we only deliver within ${result.maxDistanceKm}km of our restaurant.`,
-        distance: result.distanceKm,
-        maxDistance: result.maxDistanceKm
+        error: 'Unable to find this postcode. Please check and try again.'
+      };
+    }
+
+    // Convert meters to miles (Google Maps API returns meters even with imperial units)
+    const metersToMiles = (meters) => meters * 0.000621371;
+    const distanceInMiles = metersToMiles(element.distance.value);
+    const MAX_DELIVERY_DISTANCE_MILES = 4;
+
+    if (distanceInMiles > MAX_DELIVERY_DISTANCE_MILES) {
+      return {
+        isValid: false,
+        error: `Sorry, we don't deliver to ${postcode}. This location is ${distanceInMiles.toFixed(1)} miles away, but we only deliver within ${MAX_DELIVERY_DISTANCE_MILES} miles of our restaurant.`,
+        distance: distanceInMiles,
+        maxDistance: MAX_DELIVERY_DISTANCE_MILES
       };
     }
 
     return {
       isValid: true,
-      message: `Great! We deliver to ${result.postcode}. Distance: ${result.distanceKm}km`,
-      distance: result.distanceKm,
-      postcode: result.postcode
+      message: `Great! We deliver to ${postcode}. Distance: ${distanceInMiles.toFixed(1)} miles`,
+      distance: distanceInMiles,
+      postcode: postcode
     };
+
   } catch (error) {
     console.error('Error validating delivery postcode:', error.message);
     return {

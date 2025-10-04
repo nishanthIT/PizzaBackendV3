@@ -464,24 +464,29 @@ export default async function checkout(req, res) {
   try {
     const userId = req.user.userId; // Note: using userId from JWT token
 
-    // Get user's active cart from database with retry logic
-    const userCart = await prismaWithRetry(() => 
-      prisma.cart.findFirst({
-        where: { userId },
-        include: {
-          cartItems: {
-            include: {
-              pizza: true,
-              combo: true,
-              comboStyleItem: true, // Add combo style item relation
-              otherItem: true,
-              cartToppings: true,
-              cartIngredients: true,
+    // Use validated cart from middleware if available, otherwise fetch from database
+    let userCart = req.validatedCart;
+    
+    if (!userCart) {
+      // Fallback: Get user's active cart from database with retry logic
+      userCart = await prismaWithRetry(() => 
+        prisma.cart.findFirst({
+          where: { userId },
+          include: {
+            cartItems: {
+              include: {
+                pizza: true,
+                combo: true,
+                comboStyleItem: true, // Add combo style item relation
+                otherItem: true,
+                cartToppings: true,
+                cartIngredients: true,
+              },
             },
           },
-        },
-      })
-    );
+        })
+      );
+    }
 
     if (!userCart || userCart.cartItems.length === 0) {
       return res.status(400).json({ error: "No active cart found or cart is empty" });
@@ -653,6 +658,7 @@ export async function handleStripeWebhook(req, res) {
                 combo: true,
                 comboStyleItem: true, // Add combo style item relation
                 otherItem: true,
+                userChoice: true, // Add user choice relation
                 cartToppings: { include: { topping: true } },
                 cartIngredients: { include: { ingredient: true } },
               },
@@ -687,6 +693,8 @@ export async function handleStripeWebhook(req, res) {
                   comboId: item.comboId,
                   pizzaId: item.pizzaId,
                   comboStyleItemId: item.comboStyleItemId,
+                  userChoiceId: item.userChoiceId,
+                  userChoiceSelections: item.userChoiceSelections,
                   size: item.size,
                   finalPrice: item.finalPrice,
                   isMealDeal: item.isMealDeal,
@@ -706,6 +714,8 @@ export async function handleStripeWebhook(req, res) {
                   comboId: null,
                   otherItemId: null,
                   comboStyleItemId: null, // Add combo style item ID
+                  userChoiceId: null, // Add user choice ID
+                  userChoiceSelections: null, // Add user choice selections
                   // Add combo style item specific fields
                   sauce: item.sauce || null,
                   // Handle selectedSides and selectedDrinks properly
@@ -716,7 +726,15 @@ export async function handleStripeWebhook(req, res) {
                 };
 
                 // Important: Set IDs based on item type
-                if (item.comboStyleItemId) {
+                if (item.userChoiceId) {
+                  orderItem.userChoiceId = item.userChoiceId;
+                  orderItem.userChoiceSelections = item.userChoiceSelections;
+                  // Reset other IDs
+                  orderItem.pizzaId = null;
+                  orderItem.comboId = null;
+                  orderItem.otherItemId = null;
+                  orderItem.comboStyleItemId = null;
+                } else if (item.comboStyleItemId) {
                   orderItem.comboStyleItemId = item.comboStyleItemId;
                   // Reset other IDs
                   orderItem.pizzaId = null;
@@ -751,13 +769,15 @@ export async function handleStripeWebhook(req, res) {
                   hasComboId: Boolean(orderItem.comboId),
                   hasPizzaId: Boolean(orderItem.pizzaId),
                   hasComboStyleItemId: Boolean(orderItem.comboStyleItemId),
+                  hasUserChoiceId: Boolean(orderItem.userChoiceId),
+                  userChoiceSelections: orderItem.userChoiceSelections,
                   selectedSides: orderItem.selectedSides,
                   selectedDrinks: orderItem.selectedDrinks,
                   isMealDeal: orderItem.isMealDeal,
                 });
 
-                // Handle toppings and ingredients only for pizzas
-                if (!orderItem.isOtherItem && !orderItem.isCombo && !orderItem.comboStyleItemId) {
+                // Handle toppings and ingredients only for pizzas (not for user choice, other items, combos, or combo style items)
+                if (!orderItem.isOtherItem && !orderItem.isCombo && !orderItem.comboStyleItemId && !orderItem.userChoiceId) {
                   orderItem.orderToppings = {
                     create: item.cartToppings.map((t) => ({
                       name: t.topping.name,

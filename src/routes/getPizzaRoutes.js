@@ -16,6 +16,7 @@ import clearCart from "../consumerController/clearCart.js";
 import increment from "../consumerController/increasCart.js";
 import checkout from "../checkoutControler/checkout.js";
 import { validateCartPrices } from "../middleware/validateCartPrices.js";
+import { validateCartBeforeCheckout } from "../middleware/validateCartBeforeCheckout.js";
 import { getOrders } from "../consumerController/getOrder.js";
 import {
   getAllcomboList,
@@ -26,6 +27,7 @@ import {
   getOtherItemById,
 } from "../consumerController/orderItemsUser.js";
 import { completeRegistration } from "../consumerController/otp.js";
+import { getActiveUserChoices } from "../adminController/userChoiceController.js";
 // Removed peri-peri imports - now using combo style items
 import {
   getAllComboStyleItemsPublic,
@@ -48,6 +50,9 @@ router.get("/getAllPizzaList", getAllPizzaList);
 router.get("/getComboById/:id", getComboByIdUser);
 router.get("/getAllcomboList", getAllcomboList);
 
+// User Choice routes - public access
+router.get("/getActiveUserChoices", getActiveUserChoices);
+
 //login
 router.post("/otp", generateOtp);
 router.post("/verify-otp", verifyOtp);
@@ -58,7 +63,7 @@ router.get("/cart", getCart);
 router.post("/cart/clear", clearCart);
 router.post("/cart/increment", increment);
 
-router.post("/create-checkout-session", checkout);
+router.post("/create-checkout-session", authenticateUser, validateCartBeforeCheckout, checkout);
 // router.post("/cart/add",add);
 
 router.get("/getOrders", authenticateUser, getOrders);
@@ -75,6 +80,9 @@ router.get("/check-auth", authenticateUser, (req, res) => {
 // get other items by category
 router.get("/getOtherItemByCategory", getOtherItemByCategory);
 router.get("/getOtherItemById/:id", getOtherItemById);
+
+// Get active user choices for homepage
+router.get("/getActiveUserChoices", getActiveUserChoices);
 
 // All peri-peri functionality moved to combo style items system
 

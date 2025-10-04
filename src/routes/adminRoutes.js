@@ -47,6 +47,15 @@ import {
 } from "../adminController/otherItems.js";
 // Removed peri-peri imports - now using combo style items
 import {
+  createDeliveryZone,
+  deleteDeliveryZone,
+  getDeliverySettings,
+  getDeliveryZones,
+  seedDefaultDeliveryZones,
+  updateDeliverySettings,
+  updateDeliveryZone,
+} from "../adminController/deliveryController.js";
+import {
   getAllComboStyleItems,
   getComboStyleItemById,
   createComboStyleItem,
@@ -63,6 +72,17 @@ import {
   deleteCustomer,
   getCustomerStats
 } from "../adminController/customers.js";
+
+import {
+  getAllUserChoices,
+  getActiveUserChoices,
+  getUserChoiceById,
+  createUserChoice,
+  updateUserChoice,
+  deleteUserChoice,
+  getCategoryItems,
+  uploadMiddleware
+} from "../adminController/userChoiceController.js";
 
 import {
   getDashboardStats,
@@ -181,6 +201,23 @@ adminRouter.delete("/comboStyleItems/:id", deleteComboStyleItem);
 adminRouter.get("/sauces", getAvailableSauces);
 adminRouter.get("/sides", getAvailableSides);
 adminRouter.get("/drinks", getAvailableDrinks);
+
+// UserChoice routes
+adminRouter.get("/userChoices", getAllUserChoices);
+adminRouter.get("/userChoices/category-items", getCategoryItems);
+adminRouter.get("/userChoices/:id", getUserChoiceById);
+adminRouter.post("/userChoices", uploadMiddleware, createUserChoice);
+adminRouter.put("/userChoices/:id", uploadMiddleware, updateUserChoice);
+adminRouter.delete("/userChoices/:id", deleteUserChoice);
+
+// Delivery management routes
+adminRouter.get("/delivery/zones", getDeliveryZones);
+adminRouter.post("/delivery/zones", createDeliveryZone);
+adminRouter.put("/delivery/zones/:id", updateDeliveryZone);
+adminRouter.delete("/delivery/zones/:id", deleteDeliveryZone);
+adminRouter.get("/delivery/settings", getDeliverySettings);
+adminRouter.put("/delivery/settings", updateDeliverySettings);
+adminRouter.post("/delivery/seed", seedDefaultDeliveryZones);
 
 // Mount the admin router under /admin path
 router.use("/admin", adminRouter);

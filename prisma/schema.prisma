@@ -1,342 +1,370 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
 
-// prisma/schema.prisma
 datasource db {
-  provider  = "postgresql"
-  url  	    = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
-  id            String   @id @default(cuid())
-  name          String
-  email         String   @unique
-  password      String
-  phone         String   @unique
-  address       String
-  orders        Order[]
-  points        Decimal?  @default(0)
-  created_at    DateTime @default(now())
-  cart         Cart[]
+  id         String   @id @default(cuid())
+  name       String
+  email      String   @unique
+  password   String
+  phone      String   @unique
+  address    String
+  points     Decimal? @default(0)
+  created_at DateTime @default(now())
+  cart       Cart[]
+  orders     Order[]
 }
 
 model Admin {
-  id            String   @id @default(cuid())
-  name          String
-  email         String   @unique
-  password      String
-  phone         String   @unique
-  createdAt     DateTime @default(now())
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  phone     String   @unique
+  createdAt DateTime @default(now())
 }
 
 model Pizza {
-  id            String   @id @default(cuid())
-  name          String
-  description   String?
-  imageUrl      String?
-  sizes         Json    // {"small": 10, "medium": 15, "large": 20}
-  categoryId    String
-  category      Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)  
-  defaultToppings DefaultToppings[] 
-  defaultIngredients DefaultIngredients[]  
-  createdAt    DateTime @default(now())
-  orderItems    OrderItem[]
-  comboPizzas   ComboPizza[]
-  comboItems    ComboItem[]    // New relation
-  cartItems     CartItem[]
+  id                 String               @id @default(cuid())
+  name               String
+  description        String?
+  imageUrl           String?
+  categoryId         String
+  createdAt          DateTime             @default(now())
+  sizes              Json
+  cartItems          CartItem[]
+  comboItems         ComboItem[]
+  comboPizzas        ComboPizza[]
+  defaultIngredients DefaultIngredients[]
+  defaultToppings    DefaultToppings[]
+  orderItems         OrderItem[]
+  category           Category             @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 }
 
 model ComboOffers {
-  id             String   @id @default(cuid())
-  name           String
-  description    String
-  imageUrl       String
-  discount      Decimal
-  price          Decimal
-  createdAt      DateTime @default(now())
-  pizzas         ComboPizza[]   
-  comboItems     ComboItem[]    // New relation
-  cartItems      CartItem[]
-  orderItems    OrderItem[]
+  id          String       @id @default(cuid())
+  name        String
+  description String
+  imageUrl    String
+  discount    Decimal
+  createdAt   DateTime     @default(now())
+  price       Decimal
+  cartItems   CartItem[]
+  comboItems  ComboItem[]
+  pizzas      ComboPizza[]
+  orderItems  OrderItem[]
 }
 
 model ComboPizza {
-  id             String   @id @default(cuid())
-  comboId        String
-  pizzaId        String
-  quantity       Int
-  size           String
-  combo        ComboOffers @relation(fields: [comboId], references: [id], onDelete: Cascade)
-  pizza         Pizza       @relation(fields: [pizzaId], references: [id], onDelete: Cascade)
+  id       String      @id @default(cuid())
+  comboId  String
+  pizzaId  String
+  quantity Int
+  size     String
+  combo    ComboOffers @relation(fields: [comboId], references: [id], onDelete: Cascade)
+  pizza    Pizza       @relation(fields: [pizzaId], references: [id], onDelete: Cascade)
 }
 
 model Cart {
-  id            String   @id @default(cuid())
-  userId        String?  
-  sessionId    String?   @unique
-  user          User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  totalAmount   Decimal  @default(0)
-  cartItems     CartItem[]
-  createdAt     DateTime @default(now())
+  id          String     @id @default(cuid())
+  userId      String?
+  totalAmount Decimal    @default(0)
+  createdAt   DateTime   @default(now())
+  sessionId   String?    @unique
+  user        User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cartItems   CartItem[]
 }
 
 model CartItem {
-   id           String   @id @default(cuid())
-   cartId       String
-   cart         Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
-   pizzaId      String?  // Make pizzaId optional
-   pizza        Pizza?   @relation(fields: [pizzaId], references: [id], onDelete: Cascade)
-   comboId      String?  // Add comboId field
-   combo        ComboOffers? @relation(fields: [comboId], references: [id], onDelete: Cascade)
-   otherItemId  String?
-   otherItem    OtherItem? @relation(fields: [otherItemId], references: [id], onDelete: Cascade)
-   periPeriId   String?  // Add peri peri item support (deprecated)
-   periPeri     PeriPeriItem? @relation(fields: [periPeriId], references: [id], onDelete: Cascade)
-   comboStyleItemId String? // New flexible combo item support
-   comboStyleItem ComboStyleItem? @relation(fields: [comboStyleItemId], references: [id], onDelete: Cascade)
-   size         String
-   quantity     Int
-   basePrice    Decimal
-   finalPrice   Decimal
-   pizzaBase    String?  // Add pizzaBase field
-   sauce        String?  // Add sauce field for other items like Peri Peri Chicken
-   isMealDeal   Boolean  @default(false) // Whether this is the meal deal version
-   selectedSides String? // JSON array of selected sides for meal deals
-   selectedDrinks String? // JSON array of selected drinks for meal deals
-   cartToppings CartToppings[]     
-   cartIngredients CartIngredients[] 
-   isCombo      Boolean  @default(false)
-   isOtherItem  Boolean  @default(false)
-   isPeriPeri   Boolean  @default(false)
-   createdAt    DateTime @default(now())
+  id                   String            @id @default(cuid())
+  cartId               String
+  pizzaId              String?
+  size                 String
+  quantity             Int
+  basePrice            Decimal
+  finalPrice           Decimal
+  createdAt            DateTime          @default(now())
+  isCombo              Boolean           @default(false)
+  comboId              String?
+  isOtherItem          Boolean           @default(false)
+  otherItemId          String?
+  pizzaBase            String?
+  sauce                String?
+  isMealDeal           Boolean           @default(false)
+  isPeriPeri           Boolean           @default(false)
+  periPeriId           String?
+  comboStyleItemId     String?
+  selectedDrinks       String?
+  selectedSides        String?
+  userChoiceId         String?
+  userChoiceSelections String?
+  cartIngredients      CartIngredients[]
+  cart                 Cart              @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  combo                ComboOffers?      @relation(fields: [comboId], references: [id], onDelete: Cascade)
+  comboStyleItem       ComboStyleItem?   @relation(fields: [comboStyleItemId], references: [id], onDelete: Cascade)
+  otherItem            OtherItem?        @relation(fields: [otherItemId], references: [id], onDelete: Cascade)
+  periPeri             PeriPeriItem?     @relation(fields: [periPeriId], references: [id], onDelete: Cascade)
+  pizza                Pizza?            @relation(fields: [pizzaId], references: [id], onDelete: Cascade)
+  userChoice           UserChoice?       @relation(fields: [userChoiceId], references: [id], onDelete: Cascade)
+  cartToppings         CartToppings[]
 }
 
 model CartToppings {
-  id           String   @id @default(cuid())
-  cartItemId    String
-  cartItem      CartItem @relation(fields: [cartItemId], references: [id], onDelete: Cascade)
-  toppingId     String   
-  topping      ToppingsList @relation(fields: [toppingId], references: [id], onDelete: Cascade) 
-  defaultQuantity Int  
-  addedQuantity   Int  
+  id              String       @id @default(cuid())
+  cartItemId      String
+  toppingId       String
+  defaultQuantity Int
+  addedQuantity   Int
+  cartItem        CartItem     @relation(fields: [cartItemId], references: [id], onDelete: Cascade)
+  topping         ToppingsList @relation(fields: [toppingId], references: [id], onDelete: Cascade)
 }
 
-model CartIngredients  {
-  id                     String   @id @default(cuid())
-  cartItemId            String
-  cartItem              CartItem @relation(fields: [cartItemId], references: [id], onDelete: Cascade)
-  ingredientId          String 
-  ingredient            IngredientsList @relation(fields: [ingredientId], references: [id], onDelete: Cascade) 
-  defaultQuantity       Int
-  addedQuantity         Int
+model CartIngredients {
+  id              String          @id @default(cuid())
+  cartItemId      String
+  ingredientId    String
+  defaultQuantity Int
+  addedQuantity   Int
+  cartItem        CartItem        @relation(fields: [cartItemId], references: [id], onDelete: Cascade)
+  ingredient      IngredientsList @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
 }
 
 model Order {
   id              String      @id @default(cuid())
   userId          String
-  user            User        @relation(fields: [userId], references: [id])
   status          OrderStatus @default(PENDING)
   totalAmount     Decimal
-  deliveryMethod  String      // "delivery" or "pickup"
-  deliveryAddress String?     // null for pickup orders
-  pickupTime      String?     // null for delivery orders
-  customerName    String
-  paymentStatus   String      // "PAID", "PENDING", "FAILED"
-  paymentId       String?     // Stripe payment intent ID
-  
-  // NEW: Order timing fields
-  orderTiming     String      @default("asap") // "asap" or "preorder"
-  preorderDate    String?     // Date for preorder (YYYY-MM-DD format)
-  preorderTime    String?     // Time for preorder (HH:MM format)
-  
-  orderItems      OrderItem[]
   createdAt       DateTime    @default(now())
+  customerName    String
+  deliveryAddress String?
+  deliveryMethod  String
+  paymentId       String?
+  paymentStatus   String
+  pickupTime      String?
+  orderTiming     String      @default("asap")
+  preorderDate    String?
+  preorderTime    String?
+  user            User        @relation(fields: [userId], references: [id])
+  orderItems      OrderItem[]
 }
 
 model OrderItem {
-  id              String   @id @default(cuid())
-  orderId         String
-  order           Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  pizzaId         String?
-  pizza           Pizza?   @relation(fields: [pizzaId], references: [id])
-  comboId         String?
-  combo           ComboOffers? @relation(fields: [comboId], references: [id])
-  otherItemId     String?
-  otherItem       OtherItem? @relation(fields: [otherItemId], references: [id])
-  periPeriId      String?  // Add peri peri item support (deprecated)
-  periPeri        PeriPeriItem? @relation(fields: [periPeriId], references: [id])
-  comboStyleItemId String? // New flexible combo item support
-  comboStyleItem  ComboStyleItem? @relation(fields: [comboStyleItemId], references: [id])
-  size            String
-  quantity        Int
-  price           Decimal
-  pizzaBase       String?  // Add pizzaBase field
-  sauce           String?  // Add sauce field for other items like Peri Peri Chicken
-  isMealDeal      Boolean  @default(false) // Whether this is the meal deal version
-  selectedSides   String? // JSON array of selected sides for meal deals
-  selectedDrinks  String? // JSON array of selected drinks for meal deals
-  isCombo         Boolean  @default(false)
-  isOtherItem     Boolean  @default(false)
-  isPeriPeri      Boolean  @default(false)
-  orderToppings   OrderToppings[]
-  orderIngredients OrderIngredients[]
-  createdAt       DateTime @default(now())
+  id                   String             @id @default(cuid())
+  orderId              String
+  quantity             Int
+  size                 String
+  price                Decimal
+  pizzaId              String?
+  comboId              String?
+  isCombo              Boolean            @default(false)
+  otherItemId          String?
+  createdAt            DateTime           @default(now())
+  isOtherItem          Boolean            @default(false)
+  pizzaBase            String?
+  sauce                String?
+  isMealDeal           Boolean            @default(false)
+  isPeriPeri           Boolean            @default(false)
+  periPeriId           String?
+  comboStyleItemId     String?
+  selectedDrinks       String?
+  selectedSides        String?
+  userChoiceId         String?
+  userChoiceSelections String?
+  orderIngredients     OrderIngredients[]
+  combo                ComboOffers?       @relation(fields: [comboId], references: [id])
+  comboStyleItem       ComboStyleItem?    @relation(fields: [comboStyleItemId], references: [id])
+  order                Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  otherItem            OtherItem?         @relation(fields: [otherItemId], references: [id])
+  periPeri             PeriPeriItem?      @relation(fields: [periPeriId], references: [id])
+  pizza                Pizza?             @relation(fields: [pizzaId], references: [id])
+  userChoice           UserChoice?        @relation(fields: [userChoiceId], references: [id])
+  orderToppings        OrderToppings[]
 }
 
-model OrderToppings  {
-  id            String   @id @default(cuid())
-  name          String
-  price         Decimal
-  status        Boolean  //admin access
-  include       Boolean  //user access
-  quantity      Int
-  orderItemId    String
-  orderItem      OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+model OrderToppings {
+  id          String    @id @default(cuid())
+  name        String
+  price       Decimal
+  status      Boolean
+  include     Boolean
+  quantity    Int
+  orderItemId String
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
 }
 
-model OrderIngredients  {
-  id                     String   @id @default(cuid())
-  name                   String
-  price                  Decimal
-  status                 Boolean   //admin access
-  include                Boolean   //user access
-  quantity               Int
-  orderItemId            String
-  orderItem              OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+model OrderIngredients {
+  id          String    @id @default(cuid())
+  name        String
+  price       Decimal
+  status      Boolean
+  include     Boolean
+  quantity    Int
+  orderItemId String
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
 }
 
 model DefaultToppings {
-  id            String   @id @default(cuid())
-  name          String
-  price         Decimal
-  quantity      Int
-  include       Boolean
-  pizzaId       String   
-  pizza         Pizza    @relation(fields: [pizzaId], references: [id], onDelete: Cascade)
-  toppingId     String   // added now
-  topping   ToppingsList @relation(fields: [toppingId], references: [id], onDelete: Cascade) // added now
+  id        String       @id @default(cuid())
+  name      String
+  price     Decimal
+  quantity  Int
+  include   Boolean
+  pizzaId   String
+  toppingId String
+  pizza     Pizza        @relation(fields: [pizzaId], references: [id], onDelete: Cascade)
+  topping   ToppingsList @relation(fields: [toppingId], references: [id], onDelete: Cascade)
 }
 
 model DefaultIngredients {
-  id            String @id  @default(cuid())
-  name          String
-  price         Decimal
-  quantity      Int
-  include       Boolean
-  pizzaId       String
-  pizza         Pizza    @relation(fields: [pizzaId], references: [id], onDelete: Cascade)
-  ingredientId  String //added now
-  ingredient    IngredientsList @relation(fields: [ingredientId], references: [id], onDelete: Cascade) // added now
+  id           String          @id @default(cuid())
+  name         String
+  price        Decimal
+  quantity     Int
+  include      Boolean
+  pizzaId      String
+  ingredientId String
+  ingredient   IngredientsList @relation(fields: [ingredientId], references: [id], onDelete: Cascade)
+  pizza        Pizza           @relation(fields: [pizzaId], references: [id], onDelete: Cascade)
 }
 
 model ToppingsList {
-  id            String   @id @default(cuid())
-  name          String
-  price         Decimal
-  status        Boolean  @default(true)
+  id              String            @id @default(cuid())
+  name            String
+  price           Decimal
+  status          Boolean           @default(true)
+  cartToppings    CartToppings[]
   defaultToppings DefaultToppings[]
-  cartToppings  CartToppings[] 
-
 }
 
 model IngredientsList {
-  id            String   @id @default(cuid())
-  name          String
-  price         Decimal
-  status        Boolean  @default(true)
-  defaultIngredients DefaultIngredients[] 
-  cartIngredients CartIngredients[]
+  id                 String               @id @default(cuid())
+  name               String
+  price              Decimal
+  status             Boolean              @default(true)
+  cartIngredients    CartIngredients[]
+  defaultIngredients DefaultIngredients[]
 }
 
 model Category {
-  id            String   @id @default(cuid())
-  description   String?
-  name          String
-  pizzas        Pizza[]  
-  otherItems    OtherItem[]
-  comboStyleItems ComboStyleItem[] // Add relation to new combo style items
+  id              String           @id @default(cuid())
+  name            String
+  description     String?
+  comboStyleItems ComboStyleItem[]
+  otherItems      OtherItem[]
+  pizzas          Pizza[]
+  userChoices     UserChoice[]     @relation("UserChoiceDisplayCategory")
 }
 
 model OtherItem {
-  id            String   @id @default(cuid())
-  name          String
-  description   String?
-  imageUrl      String?
-  price         Decimal
-  availableSauces String? // JSON array of available sauces for items like Peri Peri Chicken
-  createdAt     DateTime @default(now())
-  categoryId    String
-  category      Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  cartItems     CartItem[]
-  orderItems    OrderItem[]
-  comboItems    ComboItem[]    // New relation
+  id              String      @id @default(cuid())
+  name            String
+  description     String?
+  imageUrl        String?
+  price           Decimal
+  createdAt       DateTime    @default(now())
+  categoryId      String
+  availableSauces String?
+  cartItems       CartItem[]
+  comboItems      ComboItem[]
+  orderItems      OrderItem[]
+  category        Category    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 }
 
 model PeriPeriItem {
-  id            String   @id @default(cuid())
-  name          String   // e.g., "Quarter Peri-Peri Chicken", "Half Peri-Peri Chicken"
-  description   String?
-  imageUrl      String?
-  basePrice     Decimal  // Price on its own
-  mealDealPrice Decimal? // Price with sides and drinks (optional)
-  sideCount     Int      @default(0) // Number of sides included in meal deal
-  drinkCount    Int      @default(0) // Number of drinks included in meal deal
-  itemType      String   // "quarter", "half", "whole", "wings"
-  availableSauces String // JSON array of available sauces
-  createdAt     DateTime @default(now())
-  cartItems     CartItem[]
-  orderItems    OrderItem[]
+  id              String      @id @default(cuid())
+  name            String
+  description     String?
+  imageUrl        String?
+  basePrice       Decimal
+  mealDealPrice   Decimal?
+  sideCount       Int         @default(0)
+  drinkCount      Int         @default(0)
+  itemType        String
+  availableSauces String
+  createdAt       DateTime    @default(now())
+  cartItems       CartItem[]
+  orderItems      OrderItem[]
 }
 
-// New flexible model for combo-style items (replaces PeriPeriItem)
 model ComboStyleItem {
-  id                String   @id @default(cuid())
-  name              String   // Base name like "Peri-Peri Chicken"
+  id              String      @id @default(cuid())
+  name            String
+  description     String?
+  imageUrl        String?
+  categoryId      String
+  sizePricing     Json
+  availableSauces Json
+  mealDealConfig  Json
+  isActive        Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+  cartItems       CartItem[]
+  category        Category    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  orderItems      OrderItem[]
+}
+
+model ComboItem {
+  id          String      @id @default(cuid())
+  comboId     String
+  pizzaId     String?
+  otherItemId String?
+  quantity    Int
+  size        String?
+  itemType    String      @default("PIZZA")
+  combo       ComboOffers @relation(fields: [comboId], references: [id], onDelete: Cascade)
+  otherItem   OtherItem?  @relation(fields: [otherItemId], references: [id], onDelete: Cascade)
+  pizza       Pizza?      @relation(fields: [pizzaId], references: [id], onDelete: Cascade)
+
+  @@unique([comboId, pizzaId, otherItemId, size])
+}
+
+model UserChoice {
+  id                String      @id @default(cuid())
+  name              String
   description       String?
   imageUrl          String?
-  categoryId        String   // Links to category (like "Chicken")
-  category          Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  
-  // Size configuration (JSON: {"quarter": {"basePrice": 4.50, "mealDealPrice": 7.50}, "half": {...}})
-  sizePricing       Json     
-  
-  // Available options
-  availableSauces   Json     // Array of sauce options
-  
-  // Category IDs for fetching meal deal options from existing categories (temporarily commented)
-  // sidesCategoryId   String?  // Category ID to fetch sides from (e.g. "Sides" category)
-  // drinksCategoryId  String?  // Category ID to fetch drinks from (e.g. "Drinks" category)
-  
-  // Meal deal configuration per size
-  mealDealConfig    Json     // {"quarter": {"sideCount": 1, "drinkCount": 1}, "half": {...}}
-  
-  isActive          Boolean  @default(true)
-  createdAt         DateTime @default(now())
+  displayCategoryId String
+  basePrice         Decimal
+  categoryConfigs   Json
+  isActive          Boolean     @default(true)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
   cartItems         CartItem[]
   orderItems        OrderItem[]
+  displayCategory   Category    @relation("UserChoiceDisplayCategory", fields: [displayCategoryId], references: [id], onDelete: Cascade)
 }
 
-// New model for flexible combo items
-model ComboItem {
-  id           String   @id @default(cuid())
-  comboId      String
-  pizzaId      String?
-  otherItemId  String?
-  quantity     Int
-  size         String?
-  itemType     String   @default("PIZZA") // "PIZZA" or "OTHER_ITEM"
-  combo        ComboOffers @relation(fields: [comboId], references: [id], onDelete: Cascade)
-  pizza        Pizza?      @relation(fields: [pizzaId], references: [id], onDelete: Cascade)
-  otherItem    OtherItem?  @relation(fields: [otherItemId], references: [id], onDelete: Cascade)
-  
-  @@unique([comboId, pizzaId, otherItemId, size])
+model DeliveryZone {
+  id          String   @id @default(cuid())
+  name        String
+  minDistance Decimal
+  maxDistance Decimal
+  charge      Decimal
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("delivery_zones")
+}
+
+model DeliverySettings {
+  id                  String   @id @default(cuid())
+  maxDeliveryDistance Decimal  @default(4)
+  isDeliveryEnabled   Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  shopAddress         String?
+  shopLatitude        Decimal?
+  shopLongitude       Decimal?
+  shopName            String?
+  shopPhone           String?
+
+  @@map("delivery_settings")
 }
 
 enum OrderStatus {
