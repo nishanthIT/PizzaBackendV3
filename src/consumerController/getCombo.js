@@ -33,6 +33,12 @@ const getComboByIdUser = async (req, res) => {
             pizza: true, // Includes full pizza details (name, price, etc.)
           },
         },
+        comboItems: {
+          include: {
+            pizza: true, // For pizza items in combo
+            otherItem: true, // For other items like sides, drinks, etc.
+          },
+        },
       },
     });
 
