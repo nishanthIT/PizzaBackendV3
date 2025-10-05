@@ -56,6 +56,7 @@ export const getOrders = async (req, res) => {
             pizza: true,
             combo: true,
             comboStyleItem: true, // Add combo style item relation
+            userChoice: true, // Include userChoice relation for meal deals
             orderToppings: true,
             orderIngredients: true,
             otherItem: true,
@@ -143,6 +144,21 @@ export const getOrders = async (req, res) => {
         };
       })
     );
+
+    // Log userChoice data for debugging
+    console.log("=== ORDER ITEMS DEBUG ===");
+    processedOrders.forEach((order, orderIndex) => {
+      console.log(`Order ${orderIndex + 1} (${order.id}):`);
+      order.orderItems.forEach((item, itemIndex) => {
+        if (item.userChoiceId) {
+          console.log(`  Item ${itemIndex + 1}:`);
+          console.log(`    userChoiceId: ${item.userChoiceId}`);
+          console.log(`    userChoice object:`, item.userChoice);
+          console.log(`    userChoiceSelections:`, item.userChoiceSelections);
+        }
+      });
+    });
+    console.log("=== END DEBUG ===");
 
     console.log('🔧 Processed orders with combo style items:', {
       totalOrders: processedOrders.length,

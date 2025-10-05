@@ -6,10 +6,11 @@ const prisma = new PrismaClient();
 export const getAllUserChoicesPublic = async (req, res) => {
   try {
     console.log("🔧 getAllUserChoicesPublic called");
-    const { categoryId } = req.query;
+    const { categoryId, showInactive } = req.query;
     
     const whereClause = {
-      isActive: true,
+      // Only filter by isActive if showInactive is not true
+      ...(showInactive !== 'true' && { isActive: true }),
       ...(categoryId && { displayCategoryId: categoryId })
     };
     
@@ -79,9 +80,9 @@ export const getUserChoiceByIdPublic = async (req, res) => {
 // Get available items for a UserChoice category configuration
 export const getUserChoiceItems = async (req, res) => {
   try {
-    const { userChoiceId, categoryType } = req.query;
+    const { userChoiceId, categoryType, categoryId } = req.query;
     
-    console.log('🔧 Fetching items for UserChoice:', userChoiceId, 'categoryType:', categoryType);
+    console.log('🔧 Fetching items for UserChoice:', userChoiceId, 'categoryType:', categoryType, 'categoryId:', categoryId);
     
     if (!userChoiceId || !categoryType) {
       return res.status(400).json({ 
@@ -103,10 +104,13 @@ export const getUserChoiceItems = async (req, res) => {
       ? userChoice.categoryConfigs 
       : [];
       
-    const categoryConfig = categoryConfigs.find(config => config.type === categoryType);
+    // If categoryId is provided, find by both type and categoryId for precision
+    const categoryConfig = categoryId 
+      ? categoryConfigs.find(config => config.type === categoryType && config.categoryId === categoryId)
+      : categoryConfigs.find(config => config.type === categoryType);
     
     if (!categoryConfig) {
-      console.log('🔧 No category config found for type:', categoryType);
+      console.log('🔧 No category config found for type:', categoryType, 'categoryId:', categoryId);
       return res.status(200).json([]);
     }
     
@@ -128,7 +132,8 @@ export const getUserChoiceItems = async (req, res) => {
         },
         orderBy: { name: 'asc' }
       });
-    } else if (categoryConfig.type === 'other') {
+    } else if (categoryConfig.type === 'other' || categoryConfig.type === 'burger' || categoryConfig.type === 'drink' || categoryConfig.type === 'side') {
+      // Handle all non-pizza items (burgers, drinks, sides, others)
       items = await prisma.otherItem.findMany({
         where: {
           categoryId: categoryConfig.categoryId
