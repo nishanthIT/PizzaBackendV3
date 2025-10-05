@@ -50,12 +50,16 @@ export const getAllUserChoicesPublic = async (req, res) => {
 export const getUserChoiceByIdPublic = async (req, res) => {
   try {
     const { id } = req.params;
+    const { allowInactive } = req.query;
+    
+    const whereClause = {
+      id,
+      // Only filter by isActive if allowInactive is not true
+      ...(allowInactive !== 'true' && { isActive: true })
+    };
     
     const userChoice = await prisma.userChoice.findFirst({
-      where: { 
-        id,
-        isActive: true 
-      },
+      where: whereClause,
       include: {
         displayCategory: {
           select: { id: true, name: true }
@@ -80,7 +84,7 @@ export const getUserChoiceByIdPublic = async (req, res) => {
 // Get available items for a UserChoice category configuration
 export const getUserChoiceItems = async (req, res) => {
   try {
-    const { userChoiceId, categoryType, categoryId } = req.query;
+    const { userChoiceId, categoryType, categoryId, allowInactive } = req.query;
     
     console.log('🔧 Fetching items for UserChoice:', userChoiceId, 'categoryType:', categoryType, 'categoryId:', categoryId);
     
@@ -91,8 +95,14 @@ export const getUserChoiceItems = async (req, res) => {
     }
     
     // Get the UserChoice to find the category configuration
+    const whereClause = {
+      id: userChoiceId,
+      // Only filter by isActive if allowInactive is not true
+      ...(allowInactive !== 'true' && { isActive: true })
+    };
+    
     const userChoice = await prisma.userChoice.findUnique({
-      where: { id: userChoiceId, isActive: true }
+      where: whereClause
     });
     
     if (!userChoice) {
