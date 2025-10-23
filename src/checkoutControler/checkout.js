@@ -504,7 +504,17 @@ export default async function checkout(req, res) {
       orderTiming,
       preorderDate,
       preorderTime,
+      customerNotes,
     } = req.body;
+
+    // Debug: Log received customer notes
+    console.log("🔍 Received checkout data:", {
+      customerNotes: customerNotes ? `"${customerNotes}"` : "null/empty",
+      deliveryMethod,
+      name,
+      hasAddress: !!address,
+      hasPostcode: !!postcode
+    });
 
     // Validate postcode if delivery method is selected
     if (deliveryMethod === "delivery") {
@@ -599,6 +609,7 @@ export default async function checkout(req, res) {
         orderTiming: orderTiming || "asap",
         preorderDate: preorderDate || "",
         preorderTime: preorderTime || "",
+        customerNotes: customerNotes || "",
       },
     });
 
@@ -634,7 +645,20 @@ export async function handleStripeWebhook(req, res) {
         address,
         pickupTime,
         totalAmount,
+        orderTiming,
+        preorderDate,
+        preorderTime,
+        customerNotes,
       } = session.metadata;
+
+      // Debug: Log webhook metadata
+      console.log("🔍 Webhook received metadata:", {
+        sessionId: session.id,
+        customerNotes: customerNotes ? `"${customerNotes}"` : "null/empty",
+        userId,
+        totalAmount,
+        deliveryMethod
+      });
 
       // Check if order already exists for this payment
       const existingOrder = await prisma.order.findFirst({
@@ -682,6 +706,10 @@ export async function handleStripeWebhook(req, res) {
             customerName: name,
             paymentStatus: "PAID",
             paymentId: session.payment_intent,
+            orderTiming: orderTiming || "asap",
+            preorderDate: preorderDate || null,
+            preorderTime: preorderTime || null,
+            customerNotes: customerNotes || null,
             orderItems: {
               create: cart.cartItems.map((item) => {
                 // Debug log to verify cart item data
@@ -833,13 +861,9 @@ export async function handleStripeWebhook(req, res) {
 
       console.log("✅ Order created successfully:", {
         id: result.id,
-        items: result.orderItems.map((item) => ({
-          id: item.id,
-          isOtherItem: item.isOtherItem,
-          otherItemId: item.otherItemId,
-          size: item.size,
-          price: item.price,
-        })),
+        customerNotes: result.customerNotes ? `"${result.customerNotes}"` : "null/empty",
+        totalAmount: result.totalAmount,
+        itemsCount: result.orderItems.length,
       });
 
       // After order creation, add this verification log

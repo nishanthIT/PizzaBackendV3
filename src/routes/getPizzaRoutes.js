@@ -36,6 +36,10 @@ import {
   getAvailableDrinksPublic,
   getAvailableSauces
 } from "../adminController/comboStyleItems.js";
+import {
+  getAllActivePizzaBuilderDeals,
+  getPizzaBuilderDealByIdPublic
+} from "../consumerController/pizzaBuilderPublic.js";
 
 const router = express.Router();
 
@@ -92,5 +96,9 @@ router.get("/getComboStyleItem/:id", getComboStyleItemByIdPublic);
 router.get("/getComboStyleItemSides", getAvailableSidesPublic);
 router.get("/getComboStyleItemDrinks", getAvailableDrinksPublic);
 router.get("/getAvailableSauces", getAvailableSauces);
+
+// Pizza Builder routes - public access
+router.get("/getPizzaBuilderDeals", getAllActivePizzaBuilderDeals);
+router.get("/getPizzaBuilderDeal/:id", getPizzaBuilderDealByIdPublic);
 
 export default router;

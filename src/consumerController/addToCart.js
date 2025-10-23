@@ -88,12 +88,20 @@ import { authenticateUser } from "../middleware/authMiddleware.js";
 const prisma = new PrismaClient();
 
 function itemsMatch(a, b) {
-  return (
-    a.pizzaId === b.pizzaId &&
+  // For Pizza Builder items, also check pizzaBuilderDealId and pizzaBase
+  const basicMatch = a.pizzaId === b.pizzaId &&
     a.size === b.size &&
     JSON.stringify(a.toppings) === JSON.stringify(b.toppings) &&
-    JSON.stringify(a.ingredients) === JSON.stringify(b.ingredients)
-  );
+    JSON.stringify(a.ingredients) === JSON.stringify(b.ingredients);
+
+  // If both have Pizza Builder data, ensure they match
+  if (a.pizzaBuilderDealId || b.pizzaBuilderDealId) {
+    return basicMatch && 
+           a.pizzaBuilderDealId === b.pizzaBuilderDealId &&
+           a.pizzaBase === b.pizzaBase;
+  }
+
+  return basicMatch;
 }
 
 export default async function addToCart(req, res) {
@@ -124,10 +132,115 @@ export default async function addToCart(req, res) {
     const ingredients = localItem.ingredients || [];
     const size = localItem.size;
     const quantity = Number(localItem.quantity) || 1;
-    const finalPrice =
-      Number(localItem.price) || Number(localItem.finalPrice) || 0;
-    const basePrice =
-      Number(localItem.eachprice) || Number(localItem.basePrice) || 0;
+    let finalPrice = Number(localItem.price) || Number(localItem.finalPrice) || 0;
+    let basePrice = Number(localItem.eachprice) || Number(localItem.basePrice) || 0;
+
+    // Check if this is a Pizza Builder item by checking the pizza data structure
+    const isPizzaBuilder = localItem.isPizzaBuilder || 
+                          localItem.pizza?.isPizzaBuilder || 
+                          (localItem.pizzaBuilderDealId !== undefined);
+
+    console.log("🍕 AddToCart - Pizza Builder Detection:", {
+      isPizzaBuilder,
+      pizzaBuilderDealId: localItem.pizzaBuilderDealId,
+      originalPrice: finalPrice,
+      toppingsCount: toppings.reduce((sum, t) => sum + (t.quantity || 0), 0)
+    });
+
+    // If this is a Pizza Builder item, recalculate the price correctly
+    if (isPizzaBuilder && localItem.pizzaBuilderDealId) {
+      try {
+        // Fetch the Pizza Builder Deal to get pricing rules
+        const pizzaBuilderDeal = await prisma.pizzaBuilderDeal.findUnique({
+          where: { id: localItem.pizzaBuilderDealId }
+        });
+
+        if (pizzaBuilderDeal) {
+          console.log("🍕 Found Pizza Builder Deal:", {
+            name: pizzaBuilderDeal.name,
+            maxToppings: pizzaBuilderDeal.maxToppings,
+            sizePricing: pizzaBuilderDeal.sizePricing
+          });
+
+          // Get base price from the deal's size pricing
+          const sizePricing = typeof pizzaBuilderDeal.sizePricing === 'string' 
+            ? JSON.parse(pizzaBuilderDeal.sizePricing) 
+            : pizzaBuilderDeal.sizePricing;
+
+          let dealBasePrice = 0;
+          switch (size) {
+            case "Large":
+              dealBasePrice = Number(sizePricing?.LARGE || 7);
+              break;
+            case "Super Size":
+              dealBasePrice = Number(sizePricing?.SUPER_SIZE || 8.7);
+              break;
+            default:
+              dealBasePrice = Number(sizePricing?.MEDIUM || 6);
+              break;
+          }
+
+          // Calculate topping pricing
+          const maxFreeToppings = pizzaBuilderDeal.maxToppings || 4;
+          const totalToppingUnits = toppings.reduce((sum, t) => sum + (t.quantity || 0), 0);
+          const extraToppingUnits = Math.max(0, totalToppingUnits - maxFreeToppings);
+
+          let toppingCost = 0;
+          if (extraToppingUnits > 0) {
+            // Size multiplier for toppings
+            const sizeMultiplier = size === "Large" ? 1.5 : (size === "Super Size" ? 2 : 1);
+            
+            let extraUnitsRemaining = extraToppingUnits;
+            toppings.forEach((topping) => {
+              if (topping.quantity > 0 && extraUnitsRemaining > 0) {
+                const unitsToCharge = Math.min(topping.quantity, extraUnitsRemaining);
+                const toppingPrice = Number(topping.price) || 1;
+                toppingCost += unitsToCharge * toppingPrice * sizeMultiplier;
+                extraUnitsRemaining -= unitsToCharge;
+              }
+            });
+          }
+
+          // Add stuffed crust cost if applicable
+          let stuffedCrustCost = 0;
+          if (localItem.pizzaBase && localItem.pizzaBase.includes("Stuffed Crust")) {
+            switch (size) {
+              case "Large":
+                stuffedCrustCost = 3;
+                break;
+              case "Super Size":
+                stuffedCrustCost = 4;
+                break;
+              default:
+                stuffedCrustCost = 2;
+                break;
+            }
+          }
+
+          // Calculate correct final price
+          const correctedPrice = dealBasePrice + toppingCost + stuffedCrustCost;
+          
+          console.log("🍕 Pizza Builder Price Calculation:", {
+            dealBasePrice,
+            totalToppingUnits,
+            maxFreeToppings,
+            extraToppingUnits,
+            toppingCost,
+            stuffedCrustCost,
+            originalPrice: finalPrice,
+            correctedPrice,
+            quantity
+          });
+
+          // Update prices with corrected values
+          basePrice = correctedPrice;
+          finalPrice = correctedPrice * quantity;
+        }
+      } catch (error) {
+        console.error("🍕 Error recalculating Pizza Builder price:", error);
+        // Continue with original price if there's an error
+      }
+    }
 
     // Find or create cart
     let cart = await prisma.cart.findFirst({
@@ -161,12 +274,16 @@ export default async function addToCart(req, res) {
             id: i.ingredientId,
             quantity: i.addedQuantity,
           })),
+          pizzaBuilderDealId: item.pizzaBuilderDealId,
+          pizzaBase: item.pizzaBase,
         },
         {
           pizzaId,
           size,
           toppings,
           ingredients,
+          pizzaBuilderDealId: localItem.pizzaBuilderDealId,
+          pizzaBase: localItem.pizzaBase,
         }
       )
     );
@@ -182,30 +299,47 @@ export default async function addToCart(req, res) {
       });
     } else {
       // Create new item
-      await prisma.cartItem.create({
-        data: {
-          cartId: cart.id,
-          pizzaId,
-          size,
-          quantity,
-          basePrice,
-          finalPrice,
-          cartToppings: {
-            create: toppings.map((t) => ({
-              toppingId: t.id,
-              defaultQuantity: 0,
-              addedQuantity: t.quantity,
-            })),
-          },
-          cartIngredients: {
-            create: ingredients.map((i) => ({
-              ingredientId: i.id,
-              defaultQuantity: 0,
-              addedQuantity: i.quantity,
-            })),
-          },
+      const cartItemData = {
+        cartId: cart.id,
+        pizzaId,
+        size,
+        quantity,
+        basePrice,
+        finalPrice,
+        cartToppings: {
+          create: toppings.map((t) => ({
+            toppingId: t.id,
+            defaultQuantity: 0,
+            addedQuantity: t.quantity,
+          })),
         },
-      });
+        cartIngredients: {
+          create: ingredients.map((i) => ({
+            ingredientId: i.id,
+            defaultQuantity: 0,
+            addedQuantity: i.quantity,
+          })),
+        },
+      };
+
+      // Add Pizza Builder specific fields if applicable
+      if (isPizzaBuilder && localItem.pizzaBuilderDealId) {
+        cartItemData.pizzaBuilderDealId = localItem.pizzaBuilderDealId;
+        cartItemData.maxToppings = localItem.maxToppings || null;
+        
+        // Store pizza base information
+        if (localItem.pizzaBase) {
+          cartItemData.pizzaBase = localItem.pizzaBase;
+        }
+
+        console.log("🍕 Creating Pizza Builder cart item:", {
+          pizzaBuilderDealId: cartItemData.pizzaBuilderDealId,
+          maxToppings: cartItemData.maxToppings,
+          pizzaBase: cartItemData.pizzaBase
+        });
+      }
+
+      await prisma.cartItem.create({ data: cartItemData });
     }
 
     // Return updated cart

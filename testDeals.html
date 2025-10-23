@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Pizza Builder Deals</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+        .deal-link { 
+            display: block; 
+            margin: 15px 0; 
+            padding: 15px; 
+            background: #f8f9fa; 
+            text-decoration: none; 
+            color: #333;
+            border-radius: 8px;
+            border: 2px solid #e9ecef;
+            transition: all 0.3s ease;
+        }
+        .deal-link:hover { 
+            background: #e3f2fd; 
+            border-color: #2196f3;
+            transform: translateY(-2px);
+        }
+        .deal-info { 
+            font-size: 14px; 
+            color: #666; 
+            margin-top: 8px;
+            font-family: monospace;
+        }
+        .expected { 
+            color: #28a745; 
+            font-weight: bold; 
+            margin-top: 5px;
+        }
+        .instructions {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 5px;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .section { margin: 30px 0; }
+        h1 { color: #2c3e50; }
+        h2 { color: #34495e; border-bottom: 2px solid #ecf0f1; padding-bottom: 5px; }
+    </style>
+</head>
+<body>
+    <h1>🍕 Test Pizza Builder Deals</h1>
+    
+    <div class="instructions">
+        <strong>📋 Testing Instructions:</strong>
+        <ol>
+            <li>Make sure your frontend is running on localhost:3000</li>
+            <li>Open your browser's Developer Console (F12)</li>
+            <li>Click each link below and watch the console for debug messages</li>
+            <li>Look for the "🍕" emoji messages to see deal selection</li>
+            <li>Check if the "up to X toppings" message changes correctly</li>
+        </ol>
+    </div>
+
+    <div class="section">
+        <h2>🎯 Test URLs (Click to Test)</h2>
+        
+        <a href="http://localhost:3000/product-details?id=cm6yp73w70001u2vxe31zzl3a&pizzaBuilder=true&dealId=cmgzb4bh20003cacwwj9o3v6m" class="deal-link" target="_blank">
+            <strong>🔹 New-1 Deal (2 Free Toppings)</strong>
+            <div class="deal-info">dealId=cmgzb4bh20003cacwwj9o3v6m</div>
+            <div class="expected">Expected: "up to 2 toppings!"</div>
+        </a>
+        
+        <a href="http://localhost:3000/product-details?id=cm6yp73w70001u2vxe31zzl3a&pizzaBuilder=true&dealId=cmgyrcgh90001caso28y6v12e" class="deal-link" target="_blank">
+            <strong>🔸 Nishath Deal (4 Free Toppings)</strong>
+            <div class="deal-info">dealId=cmgyrcgh90001caso28y6v12e</div>
+            <div class="expected">Expected: "up to 4 toppings!"</div>
+        </a>
+        
+        <a href="http://localhost:3000/product-details?id=cm6yp73w70001u2vxe31zzl3a&pizzaBuilder=true" class="deal-link" target="_blank">
+            <strong>🔘 Default (Auto-select Best Deal)</strong>
+            <div class="deal-info">No dealId - should auto-select highest maxToppings</div>
+            <div class="expected">Expected: Auto-select Nishath (4 toppings)</div>
+        </a>
+    </div>
+
+    <div class="section">
+        <h2>🔍 Console Debug Messages to Look For:</h2>
+        <ul>
+            <li><code>🍕 URL Parameters Debug</code> - Shows extracted URL parameters</li>
+            <li><code>🔍 Raw dealId from URL</code> - Shows the dealId value</li>
+            <li><code>🔍 Looking for deal with ID</code> - Shows deal search process</li>
+            <li><code>🍕 Using URL-specified deal</code> - Confirms correct deal selection</li>
+            <li><code>🍕 Deal maxToppings</code> - Shows final maxToppings value</li>
+            <li><code>🍕 getMaxFreeToppings called</code> - Shows when limits are calculated</li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>🚨 Troubleshooting:</h2>
+        <div style="background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 5px; padding: 15px;">
+            <strong>If you still see the same maxToppings for all deals:</strong>
+            <ol>
+                <li>Hard refresh the page (Ctrl+F5) to clear any cached JavaScript</li>
+                <li>Check if you see the new debug messages in console</li>
+                <li>Verify the dealId is being extracted correctly</li>
+                <li>Check if the deal fetching happens when URL changes</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>📊 Deal Information:</h2>
+        <div style="background: #d1ecf1; border: 1px solid #b8daff; border-radius: 5px; padding: 15px;">
+            <strong>Available Deals in Database:</strong><br>
+            • <strong>New-1:</strong> ID = cmgzb4bh20003cacwwj9o3v6m, maxToppings = 2<br>
+            • <strong>Nishath:</strong> ID = cmgyrcgh90001caso28y6v12e, maxToppings = 4
+        </div>
+    </div>
+</body>
+</html>

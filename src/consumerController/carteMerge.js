@@ -649,6 +649,20 @@
 
 
 
+// SECURE CART MERGE WITH PIZZA BUILDER VALIDATION
+// ================================================
+// This module handles secure cart synchronization with comprehensive validation:
+// 1. Regular pizzas: Size-based pricing with topping/ingredient multipliers
+// 2. Combo items: Fixed pricing validation
+// 3. Other items: Price validation with sauce support
+// 4. Combo style items: Meal deal vs regular pricing
+// 5. **NEW: User Choice Items (Pizza Builder)**:
+//    - Validates maximum topping limits (default: 4 toppings)
+//    - Calculates additional costs for extra toppings beyond limit
+//    - Applies size multipliers to extra topping costs
+//    - Securely validates all selected toppings exist in database
+//    - Prevents price tampering for Pizza Builder items
+
 import { PrismaClient } from "@prisma/client";
 import { authenticateUser } from "../middleware/authMiddleware.js";
 
@@ -693,8 +707,15 @@ function getSizeMultiplier(size) {
   }
 }
 
-// Enhanced item matching logic that considers pizzaBase
+// Enhanced item matching logic that considers pizzaBase and user choice selections
 function itemsMatch(existingItem, localItem) {
+  // For user choice items (including Pizza Builder)
+  if (localItem.type === 'userChoice') {
+    return existingItem.userChoiceId === localItem.id &&
+           existingItem.size === (localItem.size || 'Regular') &&
+           JSON.stringify(existingItem.userChoiceSelections || {}) === JSON.stringify(localItem.selectedItems || {});
+  }
+  
   // For combo style items
   if (localItem.comboStyleItemId) {
     return existingItem.comboStyleItemId === localItem.comboStyleItemId &&
@@ -734,7 +755,8 @@ function itemsMatch(existingItem, localItem) {
     ) &&
     !existingItem.isCombo &&
     !existingItem.isOtherItem &&
-    !existingItem.comboStyleItemId
+    !existingItem.comboStyleItemId &&
+    !existingItem.userChoiceId
   );
 }
 
@@ -953,13 +975,6 @@ function normalizePizzaBase(pizzaBase) {
 async function calculateSecurePrice(localItem) {
   try {
     console.log(`🔒 SECURITY: Calculating secure price for item: ${localItem.title || localItem.name}`);
-    console.log("🔍 DEBUG - localItem structure:", {
-      comboStyleItemId: localItem.comboStyleItemId,
-      isCombo: localItem.isCombo,
-      isOtherItem: localItem.isOtherItem,
-      id: localItem.id,
-      pizzaId: localItem.pizzaId
-    });
     
     // For combo style items
     if (localItem.comboStyleItemId) {
@@ -1026,7 +1041,7 @@ async function calculateSecurePrice(localItem) {
       return otherPrice;
     }
 
-    // **NEW: For user choice items**
+    // **NEW: For user choice items with Pizza Builder validation**
     if (localItem.type === 'userChoice') {
       console.log(`🎯 Processing user choice item: ${localItem.id}`);
       const userChoice = await prisma.userChoice.findUnique({
@@ -1037,18 +1052,94 @@ async function calculateSecurePrice(localItem) {
         throw new Error(`User choice not found: ${localItem.id}`);
       }
       
-      // Validate price hasn't been tampered with
-      const expectedPrice = Number(userChoice.basePrice);
-      const clientPrice = Number(localItem.price || localItem.totalPrice || localItem.basePrice);
+      // **NEW: Pizza Builder validation logic**
+      let basePrice = Number(userChoice.basePrice);
+      let additionalCost = 0;
       
-      if (Math.abs(expectedPrice - clientPrice) > 0.01) {
-        console.warn(`🚨 SECURITY ALERT: Price mismatch for user choice ${userChoice.name}`);
-        console.warn(`   Expected: £${expectedPrice}, Client sent: £${clientPrice}`);
-        throw new Error(`Price validation failed for user choice: ${userChoice.name}`);
+      // Check if this is a Pizza Builder item (has selected toppings)
+      if (localItem.selectedItems && localItem.selectedItems.toppings && Array.isArray(localItem.selectedItems.toppings)) {
+        console.log(`🍕 Pizza Builder detected - validating toppings`);
+        
+        const selectedToppings = localItem.selectedItems.toppings;
+        const maxToppings = localItem.maxToppings || 4; // Default to 4 if not specified
+        const size = localItem.size || "Medium";
+        const sizeMultiplier = getSizeMultiplier(size);
+        
+        console.log(`🍕 Pizza Builder details:`);
+        console.log(`   - Selected toppings: ${selectedToppings.length}`);
+        console.log(`   - Max allowed toppings: ${maxToppings}`);
+        console.log(`   - Size: ${size} (multiplier: ${sizeMultiplier}x)`);
+        
+        // If toppings exceed the limit, calculate additional cost
+        if (selectedToppings.length > maxToppings) {
+          const extraToppings = selectedToppings.length - maxToppings;
+          console.log(`🚨 Extra toppings detected: ${extraToppings} toppings beyond limit`);
+          
+          // Validate each extra topping and calculate cost
+          for (let i = maxToppings; i < selectedToppings.length; i++) {
+            const extraTopping = selectedToppings[i];
+            
+            // Validate topping exists in database
+            const toppingData = await prisma.toppingsList.findUnique({
+              where: { id: extraTopping.id }
+            });
+            
+            if (!toppingData) {
+              console.warn(`⚠️ Invalid extra topping ID: ${extraTopping.id}`);
+              throw new Error(`Invalid topping selected: ${extraTopping.id}`);
+            }
+            
+            // Calculate additional cost with size multiplier
+            const toppingBasePrice = Number(toppingData.price);
+            const toppingCostWithSize = toppingBasePrice * sizeMultiplier;
+            additionalCost += toppingCostWithSize;
+            
+            console.log(`🧄 Extra topping: ${toppingData.name}, Base: £${toppingBasePrice.toFixed(2)}, With ${size} multiplier: £${toppingCostWithSize.toFixed(2)}`);
+          }
+          
+          console.log(`💰 Total additional cost for extra toppings: £${additionalCost.toFixed(2)}`);
+        } else {
+          console.log(`✅ Topping count within limit (${selectedToppings.length}/${maxToppings}) - no additional charges`);
+        }
+        
+        // Validate all selected toppings exist in database (security check)
+        for (const topping of selectedToppings) {
+          const toppingData = await prisma.toppingsList.findUnique({
+            where: { id: topping.id }
+          });
+          
+          if (!toppingData) {
+            console.warn(`⚠️ Invalid topping ID in selection: ${topping.id}`);
+            throw new Error(`Invalid topping selected: ${topping.id}`);
+          }
+        }
+        
+        console.log(`✅ All ${selectedToppings.length} toppings validated successfully`);
       }
       
-      const userChoicePrice = expectedPrice * localItem.quantity;
-      console.log(`💰 User choice price calculated: £${userChoicePrice.toFixed(2)} (${localItem.quantity} x £${expectedPrice})`);
+      // Calculate final price with additional costs
+      const finalPricePerItem = basePrice + additionalCost;
+      const userChoicePrice = finalPricePerItem * localItem.quantity;
+      
+      // Validate against client price (with tolerance for extra toppings)
+      const clientPrice = Number(localItem.price || localItem.totalPrice || localItem.basePrice);
+      
+      if (Math.abs(clientPrice - userChoicePrice) > 0.01) {
+        console.warn(`🚨 SECURITY ALERT: Price mismatch for user choice ${userChoice.name}`);
+        console.warn(`   Expected (base + extras): £${userChoicePrice.toFixed(2)}`);
+        console.warn(`   Client sent: £${clientPrice.toFixed(2)}`);
+        console.warn(`   Base price: £${basePrice.toFixed(2)}`);
+        console.warn(`   Additional cost: £${additionalCost.toFixed(2)}`);
+        throw new Error(`Price validation failed for Pizza Builder: ${userChoice.name}`);
+      }
+      
+      console.log(`💰 Pizza Builder price calculated:`);
+      console.log(`   Base price: £${basePrice.toFixed(2)}`);
+      console.log(`   Additional cost: £${additionalCost.toFixed(2)}`);
+      console.log(`   Per item: £${finalPricePerItem.toFixed(2)}`);
+      console.log(`   Quantity: ${localItem.quantity}`);
+      console.log(`   Total: £${userChoicePrice.toFixed(2)}`);
+      
       return userChoicePrice;
     }
     
@@ -1108,43 +1199,184 @@ async function calculateSecurePrice(localItem) {
     // Calculate topping costs FIRST (before size adjustments) - Match frontend logic
     let toppingCost = 0;
     const sizeMultiplier = getSizeMultiplier(size);
-    
+
     const toppings = localItem.toppings || [];
+
+    // Determine if this item is a pizza-builder style where some toppings are free
+    const isPizzaBuilder = localItem.isPizzaBuilder || localItem.pizzaBuilderMode || localItem.startFromZero;
     
+    // Calculate total topping units selected for logging (each quantity counts as individual units)
+    const totalToppingsSelected = toppings.reduce((sum, topping) => {
+      if (topping.quantity > 0) {
+        if (isPizzaBuilder) {
+          // For Pizza Builder: ALL toppings are considered "added" (no defaults)
+          return sum + topping.quantity;
+        } else {
+          // For regular pizzas: subtract defaults
+          const defaultTopping = pizza.defaultToppings?.find(dt => dt.toppingId === topping.id);
+          const defaultQuantity = defaultTopping ? defaultTopping.quantity : 0;
+          const addedQuantity = Math.max(0, topping.quantity - defaultQuantity);
+          return sum + addedQuantity;
+        }
+      }
+      return sum;
+    }, 0);
+
+    // Also log individual topping breakdown for clarity
+    const toppingBreakdown = toppings
+      .filter(t => t.quantity > 0)
+      .map(topping => {
+        if (isPizzaBuilder) {
+          // Pizza Builder: all toppings are added
+          return `${topping.id} (qty: ${topping.quantity}, all added)`;
+        } else {
+          // Regular pizza: calculate against defaults
+          const defaultTopping = pizza.defaultToppings?.find(dt => dt.toppingId === topping.id);
+          const defaultQuantity = defaultTopping ? defaultTopping.quantity : 0;
+          const addedQuantity = Math.max(0, topping.quantity - defaultQuantity);
+          return `${topping.id} (qty: ${topping.quantity}, added: ${addedQuantity})`;
+        }
+      });
+
+    console.log(`🔍 Topping breakdown: [${toppingBreakdown.join(', ')}]`);
+    
+    let maxToppingsLimit = null;
+    if (isPizzaBuilder) {
+      // For Pizza Builder items, ALWAYS validate from database - NEVER trust frontend values
+      let validatedMaxToppings = 4; // Default fallback
+      
+      if (localItem.pizzaBuilderDealId) {
+        try {
+          // Fetch the actual deal from database to validate maxToppings
+          const deal = await prisma.pizzaBuilderDeal.findUnique({
+            where: { id: localItem.pizzaBuilderDealId },
+            select: { id: true, name: true, maxToppings: true, isActive: true }
+          });
+          
+          if (deal && deal.isActive) {
+            validatedMaxToppings = deal.maxToppings;
+            console.log(`🍕 Validated Pizza Builder deal: ${deal.name} (maxToppings: ${deal.maxToppings})`);
+          } else {
+            console.warn(`🍕 Pizza Builder deal ${localItem.pizzaBuilderDealId} not found or inactive, using default maxToppings: ${validatedMaxToppings}`);
+          }
+        } catch (error) {
+          console.error(`🍕 Error validating Pizza Builder deal: ${error.message}`);
+        }
+      } else {
+        // 🚨 SECURITY: If no dealId, use rotation logic based on pizzaId to ensure consistency
+        // DO NOT trust any maxToppings value from frontend
+        try {
+          const deals = await prisma.pizzaBuilderDeal.findMany({
+            where: { isActive: true },
+            select: { id: true, name: true, maxToppings: true }
+          });
+          
+          if (deals && deals.length > 0) {
+            // Use the same hash logic as frontend for consistency
+            const pizzaHash = pizzaId ? pizzaId.split('').reduce((a, b) => {
+              a = ((a << 5) - a) + b.charCodeAt(0);
+              return a & a;
+            }, 0) : 0;
+            
+            const dealIndex = Math.abs(pizzaHash) % deals.length;
+            const selectedDeal = deals[dealIndex];
+            validatedMaxToppings = selectedDeal.maxToppings;
+            
+            console.log(`🍕 Backend auto-selected deal: ${selectedDeal.name} (maxToppings: ${selectedDeal.maxToppings}) via rotation for pizza ${pizzaId}`);
+          } else {
+            console.log(`🍕 No active deals found, using default maxToppings: ${validatedMaxToppings}`);
+          }
+        } catch (error) {
+          console.error(`🍕 Error in backend deal rotation: ${error.message}`);
+          console.log(`🍕 Fallback to default maxToppings: ${validatedMaxToppings}`);
+        }
+      }
+      
+      // 🚨 SECURITY: Ignore any maxToppings from frontend - only use database validated values
+      if (localItem.maxToppings && localItem.maxToppings !== validatedMaxToppings) {
+        console.warn(`🚨 SECURITY: Frontend sent maxToppings: ${localItem.maxToppings}, but database says: ${validatedMaxToppings}. Using database value for security.`);
+      }
+      
+      maxToppingsLimit = validatedMaxToppings;
+      
+      console.log(`🍕 Pizza Builder detected!`);
+      console.log(`   📊 Total toppings selected: ${totalToppingsSelected}`);
+      console.log(`   🎯 Max free toppings allowed: ${maxToppingsLimit}`);
+      console.log(`   💰 Extra toppings to be charged: ${Math.max(0, totalToppingsSelected - maxToppingsLimit)}`);
+    } else {
+      // For regular pizzas, no free topping limit applies
+      maxToppingsLimit = null;
+      console.log(`🍕 Regular pizza detected - no free topping limit`);
+      console.log(`   📊 Total toppings selected: ${totalToppingsSelected} (all will be charged)`);
+    }
+
+    // If maxToppingsLimit is present, consume free topping units first (sequence order)
+    let freeUnitsRemaining = (maxToppingsLimit !== null) ? Number(maxToppingsLimit) : null;
+
     for (const topping of toppings) {
       if (topping.quantity > 0) {
         // Validate topping exists and get real price from database
         const toppingData = await prisma.toppingsList.findUnique({
           where: { id: topping.id }
         });
-        
+
         if (!toppingData) {
           console.warn(`⚠️ Invalid topping ID: ${topping.id}`);
           continue; // Skip invalid toppings
         }
-        
+
         // Calculate price difference from default
-        const defaultTopping = pizza.defaultToppings?.find(dt => dt.toppingId === topping.id);
-        const defaultQuantity = defaultTopping ? defaultTopping.quantity : 0;
-        const addedQuantity = Math.max(0, topping.quantity - defaultQuantity);
-        const removedQuantity = Math.max(0, defaultQuantity - topping.quantity);
+        let defaultQuantity, addedQuantity, removedQuantity;
         
-        if (addedQuantity > 0) {
-          // Added toppings cost extra with size multiplier
-          const realToppingPrice = Number(toppingData.price) * sizeMultiplier;
-          const toppingCostAdded = realToppingPrice * addedQuantity;
-          toppingCost += toppingCostAdded;
-          
-          console.log(`🧄 Topping Added: ${toppingData.name}, Added: ${addedQuantity}, Base Price: £${toppingData.price}, Multiplier: ${sizeMultiplier}x, Adjusted: £${realToppingPrice.toFixed(2)}, Total: £${toppingCostAdded.toFixed(2)}`);
+        if (isPizzaBuilder) {
+          // For Pizza Builder: treat ALL toppings as added (no defaults)
+          defaultQuantity = 0;
+          addedQuantity = topping.quantity;
+          removedQuantity = 0;
+        } else {
+          // For regular pizzas: calculate against defaults
+          const defaultTopping = pizza.defaultToppings?.find(dt => dt.toppingId === topping.id);
+          defaultQuantity = defaultTopping ? defaultTopping.quantity : 0;
+          addedQuantity = Math.max(0, topping.quantity - defaultQuantity);
+          removedQuantity = Math.max(0, defaultQuantity - topping.quantity);
         }
-        
+
+        if (addedQuantity > 0) {
+          if (freeUnitsRemaining === null) {
+            // No free-topping rule applies: charge all added units
+            const realToppingPrice = Number(toppingData.price) * sizeMultiplier;
+            const toppingCostAdded = realToppingPrice * addedQuantity;
+            toppingCost += toppingCostAdded;
+            console.log(`🧄 Topping Added (no free limit): ${toppingData.name}, Added: ${addedQuantity}, Unit: £${toppingData.price}, Multiplier: ${sizeMultiplier}x, Total: £${toppingCostAdded.toFixed(2)}`);
+          } else {
+            // Consume free units first, then charge for remaining added units
+            let unitsToCharge = 0;
+            if (freeUnitsRemaining > 0) {
+              const consume = Math.min(freeUnitsRemaining, addedQuantity);
+              freeUnitsRemaining -= consume;
+              unitsToCharge = addedQuantity - consume;
+            } else {
+              unitsToCharge = addedQuantity;
+            }
+
+            if (unitsToCharge > 0) {
+              const realToppingPrice = Number(toppingData.price) * sizeMultiplier;
+              const toppingCostAdded = realToppingPrice * unitsToCharge;
+              toppingCost += toppingCostAdded;
+              console.log(`🧄 Topping Added (builder): ${toppingData.name}, Added: ${addedQuantity}, Charged Units: ${unitsToCharge}, Unit: £${toppingData.price}, Multiplier: ${sizeMultiplier}x, Charge: £${toppingCostAdded.toFixed(2)}`);
+            } else {
+              console.log(`🧄 Topping Added (builder): ${toppingData.name}, Added: ${addedQuantity}, Charged Units: 0 (covered by free limit), Free remaining: ${freeUnitsRemaining}`);
+            }
+          }
+        }
+
         if (removedQuantity > 0) {
           // Removed toppings reduce cost with size multiplier
           const realToppingPrice = Number(toppingData.price) * sizeMultiplier;
           const toppingCostRemoved = realToppingPrice * removedQuantity;
           toppingCost -= toppingCostRemoved;
-          
-          console.log(`🧄 Topping Removed: ${toppingData.name}, Removed: ${removedQuantity}, Base Price: £${toppingData.price}, Multiplier: ${sizeMultiplier}x, Adjusted: £${realToppingPrice.toFixed(2)}, Total: -£${toppingCostRemoved.toFixed(2)}`);
+
+          console.log(`🧄 Topping Removed: ${toppingData.name}, Removed: ${removedQuantity}, Base Price: £${toppingData.price}, Multiplier: ${sizeMultiplier}x, Total: -£${toppingCostRemoved.toFixed(2)}`);
         }
       }
     }
@@ -1277,6 +1509,17 @@ export default async function syncCart(req, res) {
 
     const userId = req.user.id;
     const localItems = req.body.cartItems || [];
+
+    // Debug: Log received items for Pizza Builder debugging
+    console.log("📦 DEBUG: Received items breakdown:");
+    localItems.forEach((item, index) => {
+      console.log(`   ${index + 1}. Type: ${item.type || 'pizza'}, ID: ${item.id}, Title: ${item.title || item.name}`);
+      if (item.type === 'userChoice') {
+        console.log(`      - Pizza Builder item with ${item.selectedItems?.toppings?.length || 0} toppings`);
+        console.log(`      - Max toppings: ${item.maxToppings || 4}`);
+        console.log(`      - Size: ${item.size || 'Regular'}`);
+      }
+    });
 
     console.log("📦 Received items for secure processing:", localItems.length);
     console.log("👤 User ID:", userId);
@@ -1426,19 +1669,39 @@ export default async function syncCart(req, res) {
             ingredients: [],
           });
         } else if (validatedItem.type === 'userChoice') {
-          // **NEW: Handle user choice items**
+          // **NEW: Handle user choice items (including Pizza Builder)**
+          const userChoiceSelections = validatedItem.selectedItems || {};
+          
+          // Calculate additional costs for Pizza Builder
+          let additionalToppingCost = 0;
+          if (userChoiceSelections.toppings && Array.isArray(userChoiceSelections.toppings)) {
+            const maxToppings = validatedItem.maxToppings || 4;
+            const extraToppings = Math.max(0, userChoiceSelections.toppings.length - maxToppings);
+            
+            if (extraToppings > 0) {
+              // Calculate the extra topping cost (already calculated in validation)
+              const totalPrice = securePrice;
+              const basePrice = secureEachPrice * validatedItem.quantity;
+              additionalToppingCost = totalPrice - basePrice;
+              
+              console.log(`🍕 Pizza Builder cart item: ${extraToppings} extra toppings, additional cost: £${additionalToppingCost.toFixed(2)}`);
+            }
+          }
+          
           itemsToCreate.push({
             cartId: cart.id,
             pizzaId: null,
             comboId: null,
             otherItemId: null,
             comboStyleItemId: null,
-            userChoiceId: validatedItem.id, // Use userChoiceId instead of type
-            userChoiceSelections: JSON.stringify(validatedItem.selectedItems || {}), // Store as JSON string
+            userChoiceId: validatedItem.id,
+            userChoiceSelections: JSON.stringify(userChoiceSelections),
             size: validatedItem.size || 'Regular',
             quantity: validatedItem.quantity,
             basePrice: secureEachPrice,
             finalPrice: securePrice,
+            additionalToppingCost: additionalToppingCost, // Store extra topping cost
+            maxToppings: validatedItem.maxToppings || 4, // Store max toppings for reference
             pizzaBase: null,
             isCombo: false,
             isOtherItem: false,
@@ -1569,9 +1832,11 @@ export default async function syncCart(req, res) {
               comboId: item.comboId,
               otherItemId: item.otherItemId,
               comboStyleItemId: item.comboStyleItemId, // Add combo style item support
-              // **NEW: Add user choice item support**
-              userChoiceId: item.userChoiceId, // Use userChoiceId field
-              userChoiceSelections: item.userChoiceSelections, // Use userChoiceSelections field
+              // **NEW: Add user choice item support with Pizza Builder fields**
+              userChoiceId: item.userChoiceId,
+              userChoiceSelections: item.userChoiceSelections,
+              additionalToppingCost: item.additionalToppingCost || 0,
+              maxToppings: item.maxToppings || 4,
               size: item.size,
               quantity: item.quantity,
               basePrice: item.basePrice,
@@ -1643,21 +1908,46 @@ export default async function syncCart(req, res) {
   } catch (err) {
     console.error("🚨 SECURITY ERROR in syncCart:", err);
     
-    if (err.message.includes("Can't reach database server")) {
+    // Handle Prisma connection errors
+    if (err.constructor.name === 'PrismaClientInitializationError' || 
+        err.message.includes("Can't reach database server")) {
+      console.error("❌ Database connection failed:", err.message);
       return res.status(503).json({ 
-        error: "Database temporarily unavailable. Please try again in a moment." 
+        error: "Database temporarily unavailable. Please try again in a moment.",
+        type: "DATABASE_CONNECTION_ERROR"
+      });
+    }
+    
+    // Handle Prisma validation errors (missing fields)
+    if (err.code === 'P2002' || err.code === 'P2025' || 
+        err.message.includes("Unknown field")) {
+      console.error("❌ Database schema mismatch:", err.message);
+      return res.status(500).json({ 
+        error: "Database schema needs to be updated. Please run migrations.",
+        type: "SCHEMA_ERROR"
       });
     }
     
     if (err.code === 'P2024') {
       return res.status(408).json({ 
-        error: "Request timeout. Please try again with fewer items." 
+        error: "Request timeout. Please try again with fewer items.",
+        type: "TIMEOUT_ERROR"
+      });
+    }
+    
+    // Handle Pizza Builder validation errors
+    if (err.message.includes("Pizza Builder") || err.message.includes("Invalid topping")) {
+      return res.status(400).json({ 
+        error: err.message,
+        type: "PIZZA_BUILDER_VALIDATION_ERROR"
       });
     }
     
     res.status(500).json({ 
       error: "Internal server error during secure cart sync.",
+      type: "INTERNAL_ERROR",
       details: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
   }
 }
+

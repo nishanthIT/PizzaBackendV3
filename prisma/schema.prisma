@@ -103,12 +103,19 @@ model CartItem {
   selectedSides        String?
   userChoiceId         String?
   userChoiceSelections String?
+  additionalToppingCost Decimal?          @default(0)
+  maxToppings          Int?              @default(4)
+  pizzaBuilderDealId   String?
+  selectedPizzaId      String?
+  selectedSize         String?
+  selectedToppings     Json?
   cartIngredients      CartIngredients[]
   cart                 Cart              @relation(fields: [cartId], references: [id], onDelete: Cascade)
   combo                ComboOffers?      @relation(fields: [comboId], references: [id], onDelete: Cascade)
   comboStyleItem       ComboStyleItem?   @relation(fields: [comboStyleItemId], references: [id], onDelete: Cascade)
   otherItem            OtherItem?        @relation(fields: [otherItemId], references: [id], onDelete: Cascade)
   periPeri             PeriPeriItem?     @relation(fields: [periPeriId], references: [id], onDelete: Cascade)
+  pizzaBuilderDeal     PizzaBuilderDeal? @relation("CartPizzaBuilder", fields: [pizzaBuilderDealId], references: [id], onDelete: Cascade)
   pizza                Pizza?            @relation(fields: [pizzaId], references: [id], onDelete: Cascade)
   userChoice           UserChoice?       @relation(fields: [userChoiceId], references: [id], onDelete: Cascade)
   cartToppings         CartToppings[]
@@ -149,6 +156,7 @@ model Order {
   orderTiming     String      @default("asap")
   preorderDate    String?
   preorderTime    String?
+  customerNotes   String?
   user            User        @relation(fields: [userId], references: [id])
   orderItems      OrderItem[]
 }
@@ -175,12 +183,15 @@ model OrderItem {
   selectedSides        String?
   userChoiceId         String?
   userChoiceSelections String?
+  pizzaBuilderData     String?
+  pizzaBuilderDealId   String?
   orderIngredients     OrderIngredients[]
   combo                ComboOffers?       @relation(fields: [comboId], references: [id])
   comboStyleItem       ComboStyleItem?    @relation(fields: [comboStyleItemId], references: [id])
   order                Order              @relation(fields: [orderId], references: [id], onDelete: Cascade)
   otherItem            OtherItem?         @relation(fields: [otherItemId], references: [id])
   periPeri             PeriPeriItem?      @relation(fields: [periPeriId], references: [id])
+  pizzaBuilderDeal     PizzaBuilderDeal?  @relation("OrderPizzaBuilder", fields: [pizzaBuilderDealId], references: [id])
   pizza                Pizza?             @relation(fields: [pizzaId], references: [id])
   userChoice           UserChoice?        @relation(fields: [userChoiceId], references: [id])
   orderToppings        OrderToppings[]
@@ -251,13 +262,14 @@ model IngredientsList {
 }
 
 model Category {
-  id              String           @id @default(cuid())
-  name            String
-  description     String?
-  comboStyleItems ComboStyleItem[]
-  otherItems      OtherItem[]
-  pizzas          Pizza[]
-  userChoices     UserChoice[]     @relation("UserChoiceDisplayCategory")
+  id                String             @id @default(cuid())
+  name              String
+  description       String?
+  comboStyleItems   ComboStyleItem[]
+  otherItems        OtherItem[]
+  pizzas            Pizza[]
+  userChoices       UserChoice[]       @relation("UserChoiceDisplayCategory")
+  pizzaBuilderDeals PizzaBuilderDeal[] @relation("PizzaBuilderDisplayCategory")
 }
 
 model OtherItem {
@@ -365,6 +377,28 @@ model DeliverySettings {
   shopPhone           String?
 
   @@map("delivery_settings")
+}
+
+model PizzaBuilderDeal {
+  id                String      @id @default(cuid())
+  name              String
+  description       String?
+  imageUrl          String?
+  maxToppings       Int         @default(4)
+  displayCategoryId String
+  availableSizes    Json
+  availableToppings Json
+  sizePricing       Json
+  isActive          Boolean     @default(true)
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  availableBases    Json
+  availableSauces   Json
+  cartItems         CartItem[]  @relation("CartPizzaBuilder")
+  orderItems        OrderItem[] @relation("OrderPizzaBuilder")
+  displayCategory   Category    @relation("PizzaBuilderDisplayCategory", fields: [displayCategoryId], references: [id], onDelete: Cascade)
+
+  @@map("pizza_builder_deals")
 }
 
 enum OrderStatus {

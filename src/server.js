@@ -875,7 +875,17 @@ app.post(
         orderTiming,
         preorderDate,
         preorderTime,
+        customerNotes,
       } = session.metadata;
+
+      // Debug: Log webhook metadata including customer notes
+      console.log("🔍 Webhook received metadata:", {
+        sessionId: session.id,
+        customerNotes: customerNotes ? `"${customerNotes}"` : "null/empty",
+        userId,
+        totalAmount,
+        deliveryMethod
+      });
 
       try {
         // Fetch cart with all related data
@@ -922,6 +932,7 @@ app.post(
             orderTiming: orderTiming || "asap",
             preorderDate: preorderDate || null,
             preorderTime: preorderTime || null,
+            customerNotes: customerNotes || null,
             orderItems: {
               create: cart.cartItems.map((item) => ({
                 pizzaId: item.isOtherItem ? null : item.pizzaId,
@@ -980,6 +991,12 @@ app.post(
         });
 
         console.log(`✅ Order created and ${rewardPoints} reward points added to user ${userId}`);
+
+        // Debug: Log customer notes in created order
+        console.log("🔍 Order created with customer notes:", {
+          orderId: order.id,
+          customerNotes: order.customerNotes ? `"${order.customerNotes}"` : "null/empty"
+        });
 
         // NOTIFICATION TO SHOP OWNER
         if (twilioClient && twilioPhone) {

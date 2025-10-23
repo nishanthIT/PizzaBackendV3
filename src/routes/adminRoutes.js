@@ -93,6 +93,15 @@ import {
   getOrderStatusDistribution
 } from "../adminController/dashboard.js";
 
+import {
+  getAllPizzaBuilderDeals,
+  getPizzaBuilderDealById,
+  createPizzaBuilderDeal,
+  updatePizzaBuilderDeal,
+  deletePizzaBuilderDeal,
+  togglePizzaBuilderDealStatus
+} from "../adminController/pizzaBuilderController.js";
+
 
 const router = express.Router();
 
@@ -209,6 +218,14 @@ adminRouter.get("/userChoices/:id", getUserChoiceById);
 adminRouter.post("/userChoices", uploadMiddleware, createUserChoice);
 adminRouter.put("/userChoices/:id", uploadMiddleware, updateUserChoice);
 adminRouter.delete("/userChoices/:id", deleteUserChoice);
+
+// Pizza Builder routes
+adminRouter.get("/pizzaBuilder", getAllPizzaBuilderDeals);
+adminRouter.get("/pizzaBuilder/:id", getPizzaBuilderDealById);
+adminRouter.post("/pizzaBuilder", uploadMiddleware, createPizzaBuilderDeal);
+adminRouter.put("/pizzaBuilder/:id", uploadMiddleware, updatePizzaBuilderDeal);
+adminRouter.delete("/pizzaBuilder/:id", deletePizzaBuilderDeal);
+adminRouter.patch("/pizzaBuilder/:id/toggle-status", togglePizzaBuilderDealStatus);
 
 // Delivery management routes
 adminRouter.get("/delivery/zones", getDeliveryZones);
