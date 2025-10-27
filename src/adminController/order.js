@@ -64,6 +64,7 @@ const getOrderDetails = async (req, res) => {
               combo: true,
               comboStyleItem: true,
               userChoice: true, // Add user choice relation
+              pizzaBuilderDeal: true, // Add Pizza Builder deal relation
               orderToppings: true,
               otherItem: true, 
               orderIngredients: true,
@@ -355,6 +356,7 @@ const getAllOrders = async (req, res) => {
               combo: true,
               comboStyleItem: true, // Add combo style item relation
               userChoice: true, // Add user choice relation
+              pizzaBuilderDeal: true, // Add Pizza Builder deal relation
               otherItem: true, // Add other item relation
               orderToppings: true,
               orderIngredients: true,

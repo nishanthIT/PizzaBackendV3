@@ -770,6 +770,11 @@ import {
   getUserChoiceByIdPublic, 
   getUserChoiceItems 
 } from "./consumerController/userChoicePublic.js";
+import { 
+  getAllPizzaBuilderDeals,
+  getPizzaBuilderDealById 
+} from "./adminController/pizzaBuilderController.js";
+import { getActiveSpecialOffer } from "./adminController/specialOfferController.js";
 // import { rateLimitMiddleware } from "./middleware/rateLimiter.js";
 
 dotenv.config();
@@ -888,7 +893,7 @@ app.post(
       });
 
       try {
-        // Fetch cart with all related data
+        // Fetch cart with all related data including Pizza Builder deals
         const cart = await prisma.cart.findUnique({
           where: { id: cartId },
           include: {
@@ -900,6 +905,7 @@ app.post(
                 otherItem: true,
                 comboStyleItem: true, // Add combo style item relation
                 userChoice: true, // Add user choice relation
+                pizzaBuilderDeal: true, // Add Pizza Builder deal relation
                 cartToppings: {
                   include: { topping: true },
                 },
@@ -934,46 +940,185 @@ app.post(
             preorderTime: preorderTime || null,
             customerNotes: customerNotes || null,
             orderItems: {
-              create: cart.cartItems.map((item) => ({
-                pizzaId: item.isOtherItem ? null : item.pizzaId,
-                comboId: item.isCombo ? item.comboId : null,
-                otherItemId: item.otherItemId,
-                comboStyleItemId: item.comboStyleItemId || null, // Add combo style item support
-                userChoiceId: item.userChoiceId || null, // Add user choice support
-                userChoiceSelections: item.userChoiceSelections || null, // Add user choice selections
-                quantity: item.quantity,
-                size: item.size,
-                price: item.finalPrice,
-                pizzaBase: item.pizzaBase || null, // Add pizzaBase field from cart item
-                sauce: item.sauce || null, // Add sauce field
-                selectedSides: item.selectedSides || null, // Add selected sides
-                selectedDrinks: item.selectedDrinks || null, // Add selected drinks
-                isMealDeal: Boolean(item.isMealDeal), // Add meal deal flag
-                isCombo: Boolean(item.isCombo),
-                isOtherItem: Boolean(item.isOtherItem),
-                orderToppings: {
-                  create: !item.isOtherItem && !item.isCombo
-                    ? item.cartToppings.map((t) => ({
-                      name: t.topping.name,
-                      price: t.topping.price,
-                      status: true,
-                      include: true,
-                      quantity: t.addedQuantity,
-                    }))
-                    : [],
-                },
-                orderIngredients: {
-                  create: !item.isOtherItem && !item.isCombo
-                    ? item.cartIngredients.map((i) => ({
-                      name: i.ingredient.name,
-                      price: i.ingredient.price,
-                      status: true,
-                      include: true,
-                      quantity: i.addedQuantity,
-                    }))
-                    : [],
-                },
-              })),
+              create: cart.cartItems.map((item) => {
+                console.log("🍕 WEBHOOK: Processing cart item:", {
+                  id: item.id,
+                  isPizzaBuilder: !!item.pizzaBuilderDealId,
+                  pizzaBuilderDealId: item.pizzaBuilderDealId,
+                  selectedToppings: item.selectedToppings,
+                  maxToppings: item.maxToppings,
+                  isOtherItem: item.isOtherItem,
+                  isCombo: item.isCombo
+                });
+
+                const orderItem = {
+                  pizzaId: item.isOtherItem || item.pizzaBuilderDealId ? null : item.pizzaId,
+                  comboId: item.isCombo ? item.comboId : null,
+                  otherItemId: item.otherItemId,
+                  comboStyleItemId: item.comboStyleItemId || null,
+                  userChoiceId: item.userChoiceId || null,
+                  userChoiceSelections: item.userChoiceSelections || null,
+                  quantity: item.quantity,
+                  size: item.size,
+                  price: item.finalPrice,
+                  pizzaBase: item.pizzaBase || null,
+                  sauce: item.sauce || null,
+                  selectedSides: item.selectedSides || null,
+                  selectedDrinks: item.selectedDrinks || null,
+                  isMealDeal: Boolean(item.isMealDeal),
+                  isCombo: Boolean(item.isCombo),
+                  isOtherItem: Boolean(item.isOtherItem),
+                };
+
+                // Handle Pizza Builder items
+                if (item.pizzaBuilderDealId) {
+                  console.log("🍕 WEBHOOK: Processing Pizza Builder item");
+                  console.log("🔍 WEBHOOK: Pizza Builder raw data:", {
+                    pizzaBuilderDealId: item.pizzaBuilderDealId,
+                    selectedToppings: item.selectedToppings,
+                    maxToppings: item.maxToppings,
+                    selectedToppingsType: typeof item.selectedToppings,
+                    isObject: typeof item.selectedToppings === 'object',
+                    isString: typeof item.selectedToppings === 'string'
+                  });
+                  
+                  orderItem.pizzaBuilderDealId = item.pizzaBuilderDealId;
+                  orderItem.selectedToppings = JSON.stringify(item.selectedToppings); // Convert to string for storage
+                  orderItem.maxToppings = item.maxToppings;
+                  
+                  // Create formatted topping summary for pizzaBuilderToppings field
+                  let pizzaBuilderToppings = "";
+                  let toppingNames = [];
+                  
+                  if (item.selectedToppings) {
+                    try {
+                      // selectedToppings is already an object from the database (Json field)
+                      let selectedToppingsObj = item.selectedToppings;
+                      
+                      // If it's somehow a string, parse it
+                      if (typeof selectedToppingsObj === 'string') {
+                        selectedToppingsObj = JSON.parse(selectedToppingsObj);
+                      }
+                      
+                      console.log("🔍 WEBHOOK: Parsed selectedToppings:", selectedToppingsObj);
+                      
+                      // Extract topping names (handle both {id: name} and array formats)
+                      if (Array.isArray(selectedToppingsObj)) {
+                        toppingNames = selectedToppingsObj;
+                      } else if (typeof selectedToppingsObj === 'object') {
+                        toppingNames = Object.values(selectedToppingsObj);
+                      }
+                      
+                      const toppingCount = toppingNames.length;
+                      const maxToppings = item.maxToppings || 4;
+                      
+                      if (toppingCount > 0) {
+                        if (toppingCount > maxToppings) {
+                          const extraToppings = toppingCount - maxToppings;
+                          pizzaBuilderToppings = `Selected toppings ${toppingCount}/${maxToppings} (+${extraToppings} extra): ${toppingNames.join(', ')}`;
+                        } else {
+                          pizzaBuilderToppings = `Selected toppings ${toppingCount}/${maxToppings}: ${toppingNames.join(', ')}`;
+                        }
+                      } else {
+                        pizzaBuilderToppings = `Selected toppings 0/${maxToppings}: No toppings selected`;
+                      }
+                      
+                      console.log("🍕 WEBHOOK: Created topping summary:", pizzaBuilderToppings);
+                    } catch (parseError) {
+                      console.error("❌ WEBHOOK: Error processing selectedToppings:", parseError);
+                      pizzaBuilderToppings = `Selected toppings 0/${item.maxToppings || 4}: Error processing toppings`;
+                    }
+                  } else {
+                    console.log("⚠️ WEBHOOK: No selectedToppings found");
+                    pizzaBuilderToppings = `Selected toppings 0/${item.maxToppings || 4}: No toppings selected`;
+                  }
+                  
+                  orderItem.pizzaBuilderToppings = pizzaBuilderToppings;
+                  
+                  // Create orderToppings for Pizza Builder (converted from selectedToppings)
+                  orderItem.orderToppings = {
+                    create: (() => {
+                      if (!item.selectedToppings) {
+                        console.log("⚠️ WEBHOOK: No selectedToppings for Pizza Builder, creating empty orderToppings");
+                        return [];
+                      }
+                      
+                      try {
+                        // selectedToppings is already an object from the database (Json field)
+                        let selectedToppingsObj = item.selectedToppings;
+                        
+                        // If it's somehow a string, parse it
+                        if (typeof selectedToppingsObj === 'string') {
+                          selectedToppingsObj = JSON.parse(selectedToppingsObj);
+                        }
+                        
+                        console.log("🍕 WEBHOOK: Converting Pizza Builder toppings to orderToppings:", selectedToppingsObj);
+                        
+                        let toppingEntries = [];
+                        
+                        // Handle both {id: name} object and array formats
+                        if (Array.isArray(selectedToppingsObj)) {
+                          toppingEntries = selectedToppingsObj.map((name, index) => [index.toString(), name]);
+                        } else if (typeof selectedToppingsObj === 'object') {
+                          toppingEntries = Object.entries(selectedToppingsObj);
+                        }
+                        
+                        const orderToppings = toppingEntries.map(([id, name]) => ({
+                          name: name,
+                          price: 1.0, // Fallback price for Pizza Builder toppings
+                          status: true,
+                          include: true,
+                          quantity: 1,
+                        }));
+                        
+                        console.log("🍕 WEBHOOK: Created orderToppings:", orderToppings);
+                        return orderToppings;
+                        
+                      } catch (parseError) {
+                        console.error("❌ WEBHOOK: Error parsing Pizza Builder toppings for orderToppings:", parseError);
+                        return [];
+                      }
+                    })()
+                  };
+                  
+                  // No ingredients for Pizza Builder
+                  orderItem.orderIngredients = { create: [] };
+                  
+                } else {
+                  // Handle regular pizzas
+                  orderItem.orderToppings = {
+                    create: !item.isOtherItem && !item.isCombo
+                      ? item.cartToppings.map((t) => ({
+                        name: t.topping.name,
+                        price: t.topping.price,
+                        status: true,
+                        include: true,
+                        quantity: t.addedQuantity,
+                      }))
+                      : [],
+                  };
+                  
+                  orderItem.orderIngredients = {
+                    create: !item.isOtherItem && !item.isCombo
+                      ? item.cartIngredients.map((i) => ({
+                        name: i.ingredient.name,
+                        price: i.ingredient.price,
+                        status: true,
+                        include: true,
+                        quantity: i.addedQuantity,
+                      }))
+                      : [],
+                  };
+                }
+
+                console.log("🍕 WEBHOOK: Final order item:", {
+                  isPizzaBuilder: !!orderItem.pizzaBuilderDealId,
+                  pizzaBuilderToppings: orderItem.pizzaBuilderToppings,
+                  toppingCount: orderItem.orderToppings?.create?.length || 0
+                });
+
+                return orderItem;
+              }),
             },
           },
         });
@@ -1009,7 +1154,33 @@ app.post(
                 let itemName = '';
                 let itemDetails = '';
 
-                if (item.isOtherItem && item.otherItem) {
+                if (item.pizzaBuilderDealId && item.pizzaBuilderDeal) {
+                  // Handle Pizza Builder items
+                  itemName = item.pizzaBuilderDeal.name;
+                  const baseInfo = item.pizzaBase ? ` | Base: ${item.pizzaBase}` : '';
+                  
+                  let toppingsInfo = '';
+                  if (item.selectedToppings) {
+                    try {
+                      const selectedToppingsObj = JSON.parse(item.selectedToppings);
+                      const toppingNames = Object.values(selectedToppingsObj);
+                      const toppingCount = toppingNames.length;
+                      const maxToppings = item.maxToppings || 4;
+                      
+                      if (toppingCount > maxToppings) {
+                        const extraToppings = toppingCount - maxToppings;
+                        toppingsInfo = ` | Toppings ${toppingCount}/${maxToppings} (+${extraToppings} extra): ${toppingNames.join(', ')}`;
+                      } else {
+                        toppingsInfo = ` | Toppings ${toppingCount}/${maxToppings}: ${toppingNames.join(', ')}`;
+                      }
+                    } catch (parseError) {
+                      toppingsInfo = ' | Toppings: (parsing error)';
+                    }
+                  }
+                  
+                  itemDetails = `${item.quantity}x ${itemName} (${item.size})${baseInfo}${toppingsInfo} - £${parseFloat(item.finalPrice).toFixed(2)}`;
+                  
+                } else if (item.isOtherItem && item.otherItem) {
                   itemName = item.otherItem.name;
                   itemDetails = `${item.quantity}x ${itemName} - £${parseFloat(item.finalPrice).toFixed(2)}`;
                 } else if (item.isCombo && item.combo) {
@@ -1279,6 +1450,13 @@ app.use("/api/admin", verifyToken); // This uses admin auth
 app.get("/api/getUserChoices", getAllUserChoicesPublic);
 app.get("/api/getUserChoice/:id", getUserChoiceByIdPublic);
 app.get("/api/getUserChoiceItems", getUserChoiceItems);
+
+// Pizza Builder public endpoints (for frontend access)
+app.get("/api/pizza-builder-deals", getAllPizzaBuilderDeals);
+app.get("/api/pizza-builder-deals/:id", getPizzaBuilderDealById);
+
+// Special Offer public endpoint (for frontend access)
+app.get("/api/special-offer", getActiveSpecialOffer);
 
 // Delivery routes (public endpoints)
 app.use("/api/delivery", deliveryRoutes);

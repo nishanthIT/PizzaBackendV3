@@ -56,6 +56,11 @@ const getPizzaBuilderDealById = async (req, res) => {
 // Create new pizza builder deal
 const createPizzaBuilderDeal = async (req, res) => {
   try {
+    console.log('=== BACKEND CREATE DEBUG ===');
+    console.log('req.body:', req.body);
+    console.log('req.body.toppingsData (raw):', req.body.toppingsData);
+    console.log('req.body.availableToppings (should not exist):', req.body.availableToppings);
+    
     const {
       name,
       description,
@@ -64,24 +69,36 @@ const createPizzaBuilderDeal = async (req, res) => {
       displayCategoryId,
       availableBases,
       availableSizes,
-      availableSauces,
-      availableToppings,
-      sizePricing,
+      toppingsData, // Use toppingsData instead of availableToppings
+      mediumPrice,
+      largePrice,
+      superSizePrice,
       isActive,
     } = req.body;
 
     // Parse JSON strings from FormData
     const parsedBases = typeof availableBases === 'string' ? JSON.parse(availableBases) : availableBases;
     const parsedSizes = typeof availableSizes === 'string' ? JSON.parse(availableSizes) : availableSizes;
-    const parsedSauces = typeof availableSauces === 'string' ? JSON.parse(availableSauces) : availableSauces;
-    const parsedToppings = typeof availableToppings === 'string' ? JSON.parse(availableToppings) : availableToppings;
-    const parsedPricing = typeof sizePricing === 'string' ? JSON.parse(sizePricing) : sizePricing;
+    const parsedToppingsData = typeof toppingsData === 'string' ? JSON.parse(toppingsData) : (toppingsData || {});
     const parsedMaxToppings = typeof maxToppings === 'string' ? parseInt(maxToppings, 10) : maxToppings;
     const parsedIsActive = typeof isActive === 'string' ? isActive === 'true' : isActive;
 
-    // Validate required fields
-    if (!name || !displayCategoryId || !parsedBases || !parsedSizes || !parsedSauces || !parsedToppings || !parsedPricing) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    console.log('Parsed toppingsData:', parsedToppingsData);
+    console.log('Type of parsedToppingsData:', typeof parsedToppingsData);
+
+    // Parse pricing fields - Medium, Large, Super Size
+    const parsedMediumPrice = mediumPrice ? parseFloat(mediumPrice) : null;
+    const parsedLargePrice = largePrice ? parseFloat(largePrice) : null;
+    const parsedSuperSizePrice = superSizePrice ? parseFloat(superSizePrice) : null;
+
+    // Validate required fields - Updated to use toppingsData instead of parsedToppings
+    if (!name || !displayCategoryId || !parsedBases || !parsedSizes || !parsedToppingsData || Object.keys(parsedToppingsData).length === 0) {
+      return res.status(400).json({ error: 'Missing required fields or no toppings selected' });
+    }
+
+    // Validate at least one price is provided
+    if (!parsedMediumPrice && !parsedLargePrice && !parsedSuperSizePrice) {
+      return res.status(400).json({ error: 'At least one size price must be provided' });
     }
 
     // Verify category exists
@@ -94,20 +111,29 @@ const createPizzaBuilderDeal = async (req, res) => {
     }
 
     // Create the deal
+    const dealData = {
+      name,
+      description,
+      imageUrl,
+      maxToppings: parsedMaxToppings || 4,
+      displayCategoryId,
+      availableBases: parsedBases,
+      availableSizes: parsedSizes,
+      availableSauces: ['Tomato Sauce', 'BBQ Sauce', 'White Sauce', 'Pesto', 'Garlic Butter'], // Default sauces
+      availableToppings: parsedToppingsData, // Store {id: name} format in availableToppings too
+      toppingsData: parsedToppingsData, // Store {id: name} format
+      mediumPrice: parsedMediumPrice,
+      largePrice: parsedLargePrice,
+      superSizePrice: parsedSuperSizePrice,
+      isActive: parsedIsActive !== undefined ? parsedIsActive : true,
+    };
+
+    console.log('Data being stored to database:', dealData);
+    console.log('dealData.toppingsData:', dealData.toppingsData);
+    console.log('dealData.availableToppings (now {id: name} format):', dealData.availableToppings);
+
     const deal = await prisma.pizzaBuilderDeal.create({
-      data: {
-        name,
-        description,
-        imageUrl,
-        maxToppings: parsedMaxToppings || 4,
-        displayCategoryId,
-        availableBases: parsedBases,
-        availableSizes: parsedSizes,
-        availableSauces: parsedSauces,
-        availableToppings: parsedToppings,
-        sizePricing: parsedPricing,
-        isActive: parsedIsActive !== undefined ? parsedIsActive : true,
-      },
+      data: dealData,
       include: {
         displayCategory: {
           select: {
@@ -117,6 +143,9 @@ const createPizzaBuilderDeal = async (req, res) => {
         },
       },
     });
+
+    console.log('Created deal from database:', deal);
+    console.log('=== END BACKEND CREATE DEBUG ===');
 
     res.status(201).json(deal);
   } catch (error) {
@@ -128,6 +157,10 @@ const createPizzaBuilderDeal = async (req, res) => {
 // Update pizza builder deal
 const updatePizzaBuilderDeal = async (req, res) => {
   try {
+    console.log('=== BACKEND UPDATE DEBUG ===');
+    console.log('req.body:', req.body);
+    console.log('req.body.toppingsData (raw):', req.body.toppingsData);
+    
     const { id } = req.params;
     const {
       name,
@@ -137,20 +170,26 @@ const updatePizzaBuilderDeal = async (req, res) => {
       displayCategoryId,
       availableBases,
       availableSizes,
-      availableSauces,
-      availableToppings,
-      sizePricing,
+      toppingsData, // Use toppingsData instead of availableToppings
+      mediumPrice,
+      largePrice,
+      superSizePrice,
       isActive,
     } = req.body;
 
     // Parse JSON strings from FormData
     const parsedBases = availableBases && typeof availableBases === 'string' ? JSON.parse(availableBases) : availableBases;
     const parsedSizes = availableSizes && typeof availableSizes === 'string' ? JSON.parse(availableSizes) : availableSizes;
-    const parsedSauces = availableSauces && typeof availableSauces === 'string' ? JSON.parse(availableSauces) : availableSauces;
-    const parsedToppings = availableToppings && typeof availableToppings === 'string' ? JSON.parse(availableToppings) : availableToppings;
-    const parsedPricing = sizePricing && typeof sizePricing === 'string' ? JSON.parse(sizePricing) : sizePricing;
+    const parsedToppingsData = toppingsData && typeof toppingsData === 'string' ? JSON.parse(toppingsData) : (toppingsData || {});
     const parsedMaxToppings = maxToppings && typeof maxToppings === 'string' ? parseInt(maxToppings, 10) : maxToppings;
     const parsedIsActive = isActive !== undefined && typeof isActive === 'string' ? isActive === 'true' : isActive;
+
+    console.log('Parsed toppingsData for update:', parsedToppingsData);
+
+    // Parse pricing fields - Medium, Large, Super Size
+    const parsedMediumPrice = mediumPrice !== undefined ? (mediumPrice ? parseFloat(mediumPrice) : null) : undefined;
+    const parsedLargePrice = largePrice !== undefined ? (largePrice ? parseFloat(largePrice) : null) : undefined;
+    const parsedSuperSizePrice = superSizePrice !== undefined ? (superSizePrice ? parseFloat(superSizePrice) : null) : undefined;
 
     // Check if deal exists
     const existingDeal = await prisma.pizzaBuilderDeal.findUnique({
@@ -173,21 +212,31 @@ const updatePizzaBuilderDeal = async (req, res) => {
     }
 
     // Update the deal
+    const updateData = {
+      ...(name && { name }),
+      ...(description !== undefined && { description }),
+      ...(imageUrl !== undefined && { imageUrl }),
+      ...(parsedMaxToppings !== undefined && { maxToppings: parsedMaxToppings }),
+      ...(displayCategoryId && { displayCategoryId }),
+      ...(parsedBases && { availableBases: parsedBases }),
+      ...(parsedSizes && { availableSizes: parsedSizes }),
+      // Default sauces if not provided
+      availableSauces: ['Tomato Sauce', 'BBQ Sauce', 'White Sauce', 'Pesto', 'Garlic Butter'],
+      ...(parsedToppingsData && Object.keys(parsedToppingsData).length > 0 && { 
+        availableToppings: parsedToppingsData, // Store {id: name} format in availableToppings too
+        toppingsData: parsedToppingsData // Store {id: name} format
+      }),
+      ...(parsedMediumPrice !== undefined && { mediumPrice: parsedMediumPrice }),
+      ...(parsedLargePrice !== undefined && { largePrice: parsedLargePrice }),
+      ...(parsedSuperSizePrice !== undefined && { superSizePrice: parsedSuperSizePrice }),
+      ...(parsedIsActive !== undefined && { isActive: parsedIsActive }),
+    };
+
+    console.log('Update data being stored to database:', updateData);
+
     const updatedDeal = await prisma.pizzaBuilderDeal.update({
       where: { id },
-      data: {
-        ...(name && { name }),
-        ...(description !== undefined && { description }),
-        ...(imageUrl !== undefined && { imageUrl }),
-        ...(parsedMaxToppings !== undefined && { maxToppings: parsedMaxToppings }),
-        ...(displayCategoryId && { displayCategoryId }),
-        ...(parsedBases && { availableBases: parsedBases }),
-        ...(parsedSizes && { availableSizes: parsedSizes }),
-        ...(parsedSauces && { availableSauces: parsedSauces }),
-        ...(parsedToppings && { availableToppings: parsedToppings }),
-        ...(parsedPricing && { sizePricing: parsedPricing }),
-        ...(parsedIsActive !== undefined && { isActive: parsedIsActive }),
-      },
+      data: updateData,
       include: {
         displayCategory: {
           select: {
@@ -197,6 +246,9 @@ const updatePizzaBuilderDeal = async (req, res) => {
         },
       },
     });
+
+    console.log('Updated deal from database:', updatedDeal);
+    console.log('=== END BACKEND UPDATE DEBUG ===');
 
     res.json(updatedDeal);
   } catch (error) {

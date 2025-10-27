@@ -101,6 +101,12 @@ import {
   deletePizzaBuilderDeal,
   togglePizzaBuilderDealStatus
 } from "../adminController/pizzaBuilderController.js";
+import {
+  getSpecialOffer,
+  createSpecialOffer,
+  updateSpecialOffer,
+  deleteSpecialOffer
+} from "../adminController/specialOfferController.js";
 
 
 const router = express.Router();
@@ -235,6 +241,12 @@ adminRouter.delete("/delivery/zones/:id", deleteDeliveryZone);
 adminRouter.get("/delivery/settings", getDeliverySettings);
 adminRouter.put("/delivery/settings", updateDeliverySettings);
 adminRouter.post("/delivery/seed", seedDefaultDeliveryZones);
+
+// Special Offer routes
+adminRouter.get("/special-offer", getSpecialOffer);
+adminRouter.post("/special-offer", createSpecialOffer);
+adminRouter.put("/special-offer/:id", updateSpecialOffer);
+adminRouter.delete("/special-offer/:id", deleteSpecialOffer);
 
 // Mount the admin router under /admin path
 router.use("/admin", adminRouter);

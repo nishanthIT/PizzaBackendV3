@@ -683,6 +683,7 @@ export async function handleStripeWebhook(req, res) {
                 comboStyleItem: true, // Add combo style item relation
                 otherItem: true,
                 userChoice: true, // Add user choice relation
+                pizzaBuilderDeal: true, // Add Pizza Builder deal relation
                 cartToppings: { include: { topping: true } },
                 cartIngredients: { include: { ingredient: true } },
               },
@@ -723,6 +724,9 @@ export async function handleStripeWebhook(req, res) {
                   comboStyleItemId: item.comboStyleItemId,
                   userChoiceId: item.userChoiceId,
                   userChoiceSelections: item.userChoiceSelections,
+                  pizzaBuilderDealId: item.pizzaBuilderDealId, // Add Pizza Builder support
+                  selectedToppings: item.selectedToppings,
+                  maxToppings: item.maxToppings,
                   size: item.size,
                   finalPrice: item.finalPrice,
                   isMealDeal: item.isMealDeal,
@@ -744,6 +748,10 @@ export async function handleStripeWebhook(req, res) {
                   comboStyleItemId: null, // Add combo style item ID
                   userChoiceId: null, // Add user choice ID
                   userChoiceSelections: null, // Add user choice selections
+                  pizzaBuilderDealId: null, // Add Pizza Builder deal ID
+                  selectedToppings: null, // Add selected toppings
+                  maxToppings: null, // Add max toppings
+                  pizzaBuilderToppings: null, // Add Pizza Builder topping summary
                   // Add combo style item specific fields
                   sauce: item.sauce || null,
                   // Handle selectedSides and selectedDrinks properly
@@ -754,7 +762,50 @@ export async function handleStripeWebhook(req, res) {
                 };
 
                 // Important: Set IDs based on item type
-                if (item.userChoiceId) {
+                if (item.pizzaBuilderDealId) {
+                  // Pizza Builder item
+                  orderItem.pizzaBuilderDealId = item.pizzaBuilderDealId;
+                  orderItem.selectedToppings = item.selectedToppings;
+                  orderItem.maxToppings = item.maxToppings;
+                  
+                  // Create a formatted topping summary for pizzaBuilderToppings
+                  let toppingSummary = "";
+                  if (item.selectedToppings) {
+                    try {
+                      const selectedToppingsObj = JSON.parse(item.selectedToppings);
+                      const toppingNames = Object.values(selectedToppingsObj);
+                      const toppingCount = toppingNames.length;
+                      const maxToppings = item.maxToppings || 0;
+                      
+                      toppingSummary = `Selected toppings ${toppingCount}/${maxToppings}`;
+                      if (toppingCount > maxToppings) {
+                        const extra = toppingCount - maxToppings;
+                        toppingSummary += ` (+${extra} extra)`;
+                      }
+                      toppingSummary += `: ${toppingNames.join(', ')}`;
+                    } catch (e) {
+                      console.error("Error creating topping summary:", e);
+                      toppingSummary = "Pizza Builder toppings";
+                    }
+                  }
+                  
+                  orderItem.pizzaBuilderToppings = toppingSummary;
+                  
+                  // Reset other IDs
+                  orderItem.pizzaId = null;
+                  orderItem.comboId = null;
+                  orderItem.otherItemId = null;
+                  orderItem.comboStyleItemId = null;
+                  orderItem.userChoiceId = null;
+                  console.log("🍕 PIZZA BUILDER ORDER: Set Pizza Builder deal ID:", item.pizzaBuilderDealId);
+                  console.log("🧄 PIZZA BUILDER ORDER: Topping summary:", toppingSummary);
+                  console.log("🧄 PIZZA BUILDER ORDER: orderItem fields:", {
+                    pizzaBuilderDealId: orderItem.pizzaBuilderDealId,
+                    selectedToppings: orderItem.selectedToppings,
+                    maxToppings: orderItem.maxToppings,
+                    pizzaBuilderToppings: orderItem.pizzaBuilderToppings
+                  });
+                } else if (item.userChoiceId) {
                   orderItem.userChoiceId = item.userChoiceId;
                   orderItem.userChoiceSelections = item.userChoiceSelections;
                   // Reset other IDs
@@ -798,14 +849,48 @@ export async function handleStripeWebhook(req, res) {
                   hasPizzaId: Boolean(orderItem.pizzaId),
                   hasComboStyleItemId: Boolean(orderItem.comboStyleItemId),
                   hasUserChoiceId: Boolean(orderItem.userChoiceId),
+                  hasPizzaBuilderDealId: Boolean(orderItem.pizzaBuilderDealId),
+                  selectedToppings: orderItem.selectedToppings,
+                  maxToppings: orderItem.maxToppings,
+                  pizzaBuilderToppings: orderItem.pizzaBuilderToppings,
                   userChoiceSelections: orderItem.userChoiceSelections,
                   selectedSides: orderItem.selectedSides,
                   selectedDrinks: orderItem.selectedDrinks,
                   isMealDeal: orderItem.isMealDeal,
                 });
 
-                // Handle toppings and ingredients only for pizzas (not for user choice, other items, combos, or combo style items)
-                if (!orderItem.isOtherItem && !orderItem.isCombo && !orderItem.comboStyleItemId && !orderItem.userChoiceId) {
+                // Handle toppings and ingredients
+                if (orderItem.pizzaBuilderDealId) {
+                  // Handle Pizza Builder toppings
+                  console.log("🍕 PIZZA BUILDER: Processing toppings for order creation");
+                  const toppings = [];
+                  
+                  if (orderItem.selectedToppings) {
+                    try {
+                      const selectedToppingsObj = JSON.parse(orderItem.selectedToppings);
+                      console.log("🧄 PIZZA BUILDER: Parsed selected toppings:", selectedToppingsObj);
+                      
+                      // Convert {id: name} object to orderToppings array
+                      for (const [toppingId, toppingName] of Object.entries(selectedToppingsObj)) {
+                        toppings.push({
+                          name: toppingName,
+                          price: 1.0, // Default price, will be calculated based on size multiplier
+                          status: true,
+                          include: true,
+                          quantity: 1,
+                        });
+                      }
+                      
+                      console.log("🧄 PIZZA BUILDER: Created orderToppings array:", toppings);
+                    } catch (e) {
+                      console.error("🚨 PIZZA BUILDER: Error parsing selectedToppings:", e);
+                    }
+                  }
+                  
+                  orderItem.orderToppings = { create: toppings };
+                  orderItem.orderIngredients = { create: [] }; // Pizza Builder doesn't use ingredients
+                } else if (!orderItem.isOtherItem && !orderItem.isCombo && !orderItem.comboStyleItemId && !orderItem.userChoiceId) {
+                  // Handle regular pizza toppings
                   orderItem.orderToppings = {
                     create: item.cartToppings.map((t) => ({
                       name: t.topping.name,
@@ -840,6 +925,7 @@ export async function handleStripeWebhook(req, res) {
                 combo: true,
                 comboStyleItem: true, // Add combo style item relation
                 otherItem: true,
+                pizzaBuilderDeal: true, // Add Pizza Builder deal relation
                 orderToppings: true,
                 orderIngredients: true,
               },
@@ -865,6 +951,20 @@ export async function handleStripeWebhook(req, res) {
         totalAmount: result.totalAmount,
         itemsCount: result.orderItems.length,
       });
+
+      // Log Pizza Builder items specifically
+      const pizzaBuilderItems = result.orderItems.filter(item => item.pizzaBuilderDealId);
+      if (pizzaBuilderItems.length > 0) {
+        console.log("🍕 PIZZA BUILDER ITEMS CREATED:", pizzaBuilderItems.map(item => ({
+          id: item.id,
+          pizzaBuilderDealId: item.pizzaBuilderDealId,
+          selectedToppings: item.selectedToppings,
+          maxToppings: item.maxToppings,
+          pizzaBuilderToppings: item.pizzaBuilderToppings,
+          orderToppingsCount: item.orderToppings?.length || 0,
+          orderToppingsNames: item.orderToppings?.map(ot => ot.name) || []
+        })));
+      }
 
       // After order creation, add this verification log
       console.log(

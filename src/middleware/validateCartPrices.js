@@ -20,6 +20,9 @@ export const validateCartPrices = async (req, res, next) => {
       console.log('item.comboStyleItemId:', item.comboStyleItemId);
       console.log('item.isCombo:', item.isCombo);
       console.log('item.isOtherItem:', item.isOtherItem);
+      console.log('item.isPizzaBuilder:', item.isPizzaBuilder);
+      console.log('item.pizzaBuilderDealId:', item.pizzaBuilderDealId);
+      console.log('item.id:', item.id);
       console.log('🔍 === END DEBUG ===\n');
 
       if (item.isCombo) {
@@ -424,6 +427,62 @@ export const validateCartPrices = async (req, res, next) => {
         console.log(`✅ Validated user choice: ${userChoice.name}, Quantity: ${quantity}, Price: £${finalPrice}`);
         console.log(`📊 Total items selected across all categories: ${totalSelectedCount}`);
         console.log(`=== USER CHOICE VALIDATION END ===\n`);
+
+      } else if (item.isPizzaBuilder || item.type === 'pizzaBuilder' || item.pizzaBuilderDealId || 
+                (item.type === 'userChoice' && item.selectedItems?.toppings)) {
+        // **NEW: Handle Pizza Builder items**
+        console.log(`\n=== PIZZA BUILDER VALIDATION START ===`);
+        
+        const pizzaBuilderDealId = item.pizzaBuilderDealId || item.id;
+        console.log(`Validating Pizza Builder deal: ${pizzaBuilderDealId}`);
+        
+        // Fetch Pizza Builder deal from database
+        const pizzaBuilderDeal = await prisma.pizzaBuilderDeal.findUnique({
+          where: { id: pizzaBuilderDealId }
+        });
+
+        if (!pizzaBuilderDeal || !pizzaBuilderDeal.isActive) {
+          console.warn(`Pizza Builder deal with ID ${pizzaBuilderDealId} not found or inactive`);
+          continue;
+        }
+
+        console.log(`✅ Found Pizza Builder deal: ${pizzaBuilderDeal.name}`);
+        
+        // Get base price for selected size
+        const size = item.size || "Medium";
+        const quantity = Math.max(1, parseInt(item.quantity, 10) || 1);
+        let basePrice = 0;
+        
+        switch (size) {
+          case "Large":
+            basePrice = Number(pizzaBuilderDeal.largePrice) || 0;
+            break;
+          case "Super Size":
+            basePrice = Number(pizzaBuilderDeal.superSizePrice) || 0;
+            break;
+          default: // Medium
+            basePrice = Number(pizzaBuilderDeal.mediumPrice) || 0;
+            break;
+        }
+
+        // Calculate final price (detailed calculation will be done in syncCart)
+        const finalPrice = basePrice * quantity;
+        
+        validatedItems.push({
+          ...item,
+          quantity: quantity,
+          basePrice: basePrice,
+          eachprice: basePrice,
+          price: finalPrice,
+          finalPrice: finalPrice,
+          isPizzaBuilder: true,
+          pizzaBuilderDealId: pizzaBuilderDealId,
+          pizzaBuilderDealName: pizzaBuilderDeal.name,
+          maxToppings: pizzaBuilderDeal.maxToppings
+        });
+
+        console.log(`✅ Validated Pizza Builder: ${pizzaBuilderDeal.name}, Size: ${size}, Quantity: ${quantity}, Base Price: £${finalPrice}`);
+        console.log(`=== PIZZA BUILDER VALIDATION END ===\n`);
 
       } else {
         // Handle regular pizzas

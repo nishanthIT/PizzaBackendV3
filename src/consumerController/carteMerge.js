@@ -709,6 +709,19 @@ function getSizeMultiplier(size) {
 
 // Enhanced item matching logic that considers pizzaBase and user choice selections
 function itemsMatch(existingItem, localItem) {
+  // **NEW: For Pizza Builder items**
+  if (localItem.isPizzaBuilder || localItem.type === 'pizzaBuilder' || localItem.pizzaBuilderDealId) {
+    const existingPizzaBuilderDealId = existingItem.pizzaBuilderDealId;
+    const localPizzaBuilderDealId = localItem.pizzaBuilderDealId || localItem.id;
+    
+    return existingPizzaBuilderDealId === localPizzaBuilderDealId &&
+           existingItem.size === (localItem.size || 'Medium') &&
+           existingItem.pizzaBase === (localItem.pizzaBase || localItem.selectedItems?.base || 'Regular Crust') &&
+           JSON.stringify(existingItem.sauce || '') === JSON.stringify(localItem.sauce || localItem.selectedItems?.sauce || '') &&
+           // Compare toppings (use cleaned toppings if available)
+           JSON.stringify((existingItem.toppings || []).sort()) === JSON.stringify((localItem.cleanedToppings || localItem.toppings || []).sort());
+  }
+  
   // For user choice items (including Pizza Builder)
   if (localItem.type === 'userChoice') {
     return existingItem.userChoiceId === localItem.id &&
@@ -1039,6 +1052,212 @@ async function calculateSecurePrice(localItem) {
       const otherPrice = Number(otherItem.price) * localItem.quantity;
       console.log(`💰 Other item price calculated: £${otherPrice.toFixed(2)}`);
       return otherPrice;
+    }
+
+    // **ENHANCED: Pizza Builder detection and processing**
+    const isPizzaBuilderItem = localItem.isPizzaBuilder || 
+                              localItem.type === 'pizzaBuilder' || 
+                              localItem.pizzaBuilderDealId ||
+                              (localItem.type === 'userChoice' && localItem.selectedItems?.toppings);
+    
+    if (isPizzaBuilderItem) {
+      console.log(`🍕 PIZZA BUILDER: Processing Pizza Builder item`);
+      
+      // Get the Pizza Builder deal ID
+      const pizzaBuilderDealId = localItem.pizzaBuilderDealId || localItem.id;
+      
+      // Get Pizza Builder deal from database
+      const pizzaBuilderDeal = await prisma.pizzaBuilderDeal.findUnique({
+        where: { id: pizzaBuilderDealId }
+      });
+      
+      if (!pizzaBuilderDeal || !pizzaBuilderDeal.isActive) {
+        throw new Error(`Pizza Builder deal not found or inactive: ${pizzaBuilderDealId}`);
+      }
+      
+      console.log(`🍕 PIZZA BUILDER: Found deal "${pizzaBuilderDeal.name}" with max ${pizzaBuilderDeal.maxToppings} toppings`);
+      
+      // Get base price for the selected size
+      const size = localItem.size || "Medium";
+      let basePrice = 0;
+      
+      switch (size) {
+        case "Large":
+          basePrice = Number(pizzaBuilderDeal.largePrice) || 0;
+          break;
+        case "Super Size":
+          basePrice = Number(pizzaBuilderDeal.superSizePrice) || 0;
+          break;
+        default: // Medium
+          basePrice = Number(pizzaBuilderDeal.mediumPrice) || 0;
+          break;
+      }
+      
+      // **FIXED: Ensure base price is valid**
+      if (isNaN(basePrice) || basePrice <= 0) {
+        basePrice = 10; // Default base price if no price set
+        console.log(`⚠️ PIZZA BUILDER: No valid base price found for ${size}, using default £${basePrice}`);
+      }
+      
+      console.log(`🍕 PIZZA BUILDER: Base price for ${size}: £${basePrice.toFixed(2)}`);
+      
+      // Calculate topping costs - SECURITY: Only charge for extras beyond maxToppings
+      let toppingCost = 0;
+      const maxToppings = pizzaBuilderDeal.maxToppings;
+      
+      // Handle both frontend formats: direct toppings array or selectedItems.toppings
+      const receivedToppings = localItem.toppings || localItem.selectedItems?.toppings || [];
+      
+      // **FIXED: Only process toppings that are actually selected (quantity > 0)**
+      const selectedToppings = receivedToppings.filter(topping => 
+        topping.quantity && topping.quantity > 0
+      );
+      
+      console.log(`🍕 PIZZA BUILDER: Received ${receivedToppings.length} toppings, ${selectedToppings.length} actually selected`);
+      console.log(`🍕 PIZZA BUILDER: Selected toppings:`, selectedToppings.map(t => `${t.name}(${t.quantity})`).join(', '));
+      
+      // **SECURITY: Filter out invalid toppings before processing**
+      const validToppings = [];
+      for (const topping of selectedToppings) {
+        // Skip obviously invalid topping IDs (fallback, null, undefined, etc.)
+        if (!topping.id || 
+            topping.id.includes('fallback') || 
+            topping.id === 'null' || 
+            topping.id === 'undefined' ||
+            topping.id.length < 10) { // Valid Prisma IDs are typically 25+ chars
+          console.log(`⚠️ PIZZA BUILDER: Skipping invalid topping ID: ${topping.id}`);
+          continue;
+        }
+        
+        // Validate topping exists in database
+        const toppingData = await prisma.toppingsList.findUnique({
+          where: { id: topping.id }
+        });
+        
+        if (!toppingData) {
+          console.log(`⚠️ PIZZA BUILDER: Skipping unknown topping ID: ${topping.id}`);
+          continue;
+        }
+        
+        // Check if this topping is allowed for this Pizza Builder
+        // Handle both old array format and new {id: name} format
+        let isAllowedTopping = false;
+        if (Array.isArray(pizzaBuilderDeal.availableToppings)) {
+          // Old format: ["name1", "name2"]
+          isAllowedTopping = pizzaBuilderDeal.availableToppings.includes(toppingData.name);
+        } else if (typeof pizzaBuilderDeal.availableToppings === 'object' && pizzaBuilderDeal.availableToppings) {
+          // New format: {id: "name"}
+          isAllowedTopping = Object.values(pizzaBuilderDeal.availableToppings).includes(toppingData.name) ||
+                           Object.keys(pizzaBuilderDeal.availableToppings).includes(toppingData.id);
+        } else if (pizzaBuilderDeal.toppingsData && typeof pizzaBuilderDeal.toppingsData === 'object') {
+          // Use toppingsData as fallback
+          isAllowedTopping = Object.values(pizzaBuilderDeal.toppingsData).includes(toppingData.name) ||
+                           Object.keys(pizzaBuilderDeal.toppingsData).includes(toppingData.id);
+        }
+        
+        if (!isAllowedTopping) {
+          console.log(`⚠️ PIZZA BUILDER: Skipping disallowed topping: ${toppingData.name} (ID: ${toppingData.id})`);
+          continue;
+        }
+        
+        validToppings.push({
+          ...topping,
+          toppingData: toppingData
+        });
+        
+        console.log(`✅ PIZZA BUILDER: Valid topping - ${toppingData.name}`);
+      }
+      
+      console.log(`🍕 PIZZA BUILDER: ${validToppings.length} valid toppings out of ${selectedToppings.length} submitted`);
+      
+      // Count total topping units from VALID toppings only
+      const totalToppingUnits = validToppings.reduce((sum, topping) => sum + (topping.quantity || 1), 0);
+      const extraToppings = Math.max(0, totalToppingUnits - maxToppings);
+      
+      console.log(`🍕 PIZZA BUILDER: Total topping units: ${totalToppingUnits}, Max free: ${maxToppings}, Extra: ${extraToppings}`);
+      
+      if (extraToppings > 0) {
+        // Calculate size multiplier for pricing
+        const sizeMultiplier = getSizeMultiplier(size);
+        let extraUnitsRemaining = extraToppings;
+        
+        console.log(`💰 PIZZA BUILDER: Starting extra topping calculation - ${extraToppings} extra units to charge`);
+        
+        // Process VALID toppings to charge for extras
+        for (let i = 0; i < validToppings.length; i++) {
+          const validTopping = validToppings[i];
+          console.log(`🔍 PIZZA BUILDER: Processing topping ${i + 1}/${validToppings.length}: ${validTopping.toppingData.name} (qty: ${validTopping.quantity}, remaining: ${extraUnitsRemaining})`);
+          
+          if (validTopping.quantity > 0 && extraUnitsRemaining > 0) {
+            const toppingData = validTopping.toppingData;
+            
+            // **FIXED: Handle null/undefined topping prices with fallback**
+            let toppingPrice = Number(toppingData.additionalToppingCost);
+            if (isNaN(toppingPrice) || toppingPrice == null) {
+              toppingPrice = 1; // Default topping price for Medium (will be multiplied by size)
+              console.log(`⚠️ PIZZA BUILDER: No price found for ${toppingData.name}, using default £${toppingPrice}`);
+            }
+            
+            const adjustedPrice = toppingPrice * sizeMultiplier;
+            const unitsToCharge = Math.min(validTopping.quantity, extraUnitsRemaining);
+            const toppingCostContribution = unitsToCharge * adjustedPrice;
+            
+            toppingCost += toppingCostContribution;
+            extraUnitsRemaining -= unitsToCharge;
+            
+            console.log(`🧄 PIZZA BUILDER: Extra ${toppingData.name} x${unitsToCharge} = £${toppingCostContribution.toFixed(2)} (£${adjustedPrice.toFixed(2)} each with ${size} multiplier) - Remaining: ${extraUnitsRemaining}`);
+          } else {
+            console.log(`⏭️ PIZZA BUILDER: Skipping ${validTopping.toppingData.name} - qty: ${validTopping.quantity}, remaining: ${extraUnitsRemaining}`);
+          }
+          
+          if (extraUnitsRemaining <= 0) {
+            console.log(`✅ PIZZA BUILDER: All ${extraToppings} extra units charged, stopping loop`);
+            break;
+          }
+        }
+        
+        console.log(`💰 PIZZA BUILDER: Total extra topping cost: £${toppingCost.toFixed(2)}`);
+      }
+      
+      // Calculate stuffed crust cost if selected
+      let stuffedCrustCost = 0;
+      const pizzaBase = localItem.pizzaBase || localItem.selectedItems?.base || "Regular Crust";
+      if (pizzaBase.includes("Stuffed Crust")) {
+        switch (size) {
+          case "Large":
+            stuffedCrustCost = 3;
+            break;
+          case "Super Size":
+            stuffedCrustCost = 4;
+            break;
+          default:
+            stuffedCrustCost = 2;
+            break;
+        }
+        console.log(`🍞 PIZZA BUILDER: Stuffed crust cost for ${size}: £${stuffedCrustCost.toFixed(2)}`);
+      }
+      
+      // Calculate final price
+      const finalPricePerItem = basePrice + toppingCost + stuffedCrustCost;
+      const pizzaBuilderPrice = finalPricePerItem * localItem.quantity;
+      
+      console.log(`💰 PIZZA BUILDER: Final calculation:`);
+      console.log(`   Base price (${size}): £${basePrice.toFixed(2)}`);
+      console.log(`   Extra toppings: £${toppingCost.toFixed(2)}`);
+      console.log(`   Stuffed crust: £${stuffedCrustCost.toFixed(2)}`);
+      console.log(`   Per item total: £${finalPricePerItem.toFixed(2)}`);
+      console.log(`   Quantity: ${localItem.quantity}`);
+      console.log(`   Final total: £${pizzaBuilderPrice.toFixed(2)}`);
+      console.log(`   Valid toppings processed: ${validToppings.length}/${selectedToppings.length}`);
+      
+      // Store cleaned toppings back to localItem for cart creation
+      localItem.cleanedToppings = validToppings.map(vt => ({
+        id: vt.id,
+        quantity: vt.quantity || 1,
+        name: vt.toppingData.name
+      }));
+      
+      return pizzaBuilderPrice;
     }
 
     // **NEW: For user choice items with Pizza Builder validation**
@@ -1514,10 +1733,20 @@ export default async function syncCart(req, res) {
     console.log("📦 DEBUG: Received items breakdown:");
     localItems.forEach((item, index) => {
       console.log(`   ${index + 1}. Type: ${item.type || 'pizza'}, ID: ${item.id}, Title: ${item.title || item.name}`);
-      if (item.type === 'userChoice') {
-        console.log(`      - Pizza Builder item with ${item.selectedItems?.toppings?.length || 0} toppings`);
-        console.log(`      - Max toppings: ${item.maxToppings || 4}`);
-        console.log(`      - Size: ${item.size || 'Regular'}`);
+      
+      // Enhanced Pizza Builder detection
+      if (item.type === 'userChoice' || item.isPizzaBuilder || item.pizzaBuilderDealId) {
+        console.log(`      - Pizza Builder item detected`);
+        console.log(`      - Pizza Builder Deal ID: ${item.pizzaBuilderDealId || item.id}`);
+        console.log(`      - Size: ${item.size || 'Medium'}`);
+        console.log(`      - Max toppings: ${item.maxToppings || 'Not specified'}`);
+        
+        if (item.selectedItems?.toppings) {
+          console.log(`      - Selected toppings: ${item.selectedItems.toppings.length}`);
+        }
+        if (item.toppings) {
+          console.log(`      - Toppings array: ${item.toppings.length}`);
+        }
       }
     });
 
@@ -1533,14 +1762,23 @@ export default async function syncCart(req, res) {
         const securePrice = await calculateSecurePrice(localItem);
         const eachPrice = securePrice / localItem.quantity;
         
+        // Enhanced Pizza Builder detection for proper validation
+        const isPizzaBuilder = localItem.isPizzaBuilder || 
+                              localItem.type === 'pizzaBuilder' || 
+                              localItem.pizzaBuilderDealId ||
+                              (localItem.type === 'userChoice' && localItem.selectedItems?.toppings);
+        
         validatedItems.push({
           ...localItem,
           securePrice: securePrice,
           secureEachPrice: eachPrice,
-          validated: true
+          validated: true,
+          isPizzaBuilder: isPizzaBuilder, // Ensure this flag is set correctly
+          // Store cleaned toppings for Pizza Builder items
+          cleanedToppings: isPizzaBuilder ? (localItem.cleanedToppings || localItem.toppings) : undefined,
         });
         
-        console.log(`✅ Validated item: ${localItem.title}, Size: ${localItem.size}, Quantity: ${localItem.quantity}, Secure Price: £${securePrice.toFixed(2)}`);
+        console.log(`✅ Validated item: ${localItem.title}, Size: ${localItem.size}, Quantity: ${localItem.quantity}, Secure Price: £${securePrice.toFixed(2)}, Pizza Builder: ${isPizzaBuilder}`);
         
       } catch (error) {
         console.error(`❌ Failed to validate item: ${localItem.title}`, error.message);
@@ -1585,6 +1823,70 @@ export default async function syncCart(req, res) {
       });
     }
 
+    // **NEW: Validate existing Pizza Builder items in cart**
+    console.log('🔍 Validating existing Pizza Builder items in cart...');
+    if (cart.cartItems && cart.cartItems.length > 0) {
+      const pizzaBuilderItems = cart.cartItems.filter(item => item.pizzaBuilderDealId);
+      console.log(`📊 Found ${pizzaBuilderItems.length} existing Pizza Builder items in cart`);
+      
+      for (const pbItem of pizzaBuilderItems) {
+        console.log('=== EXISTING PIZZA BUILDER VALIDATION ===');
+        console.log(`🔍 Validating existing Pizza Builder item:`, {
+          id: pbItem.id,
+          pizzaBuilderDealId: pbItem.pizzaBuilderDealId,
+          selectedToppings: pbItem.selectedToppings,
+          size: pbItem.size,
+          quantity: pbItem.quantity
+        });
+        
+        // Fetch the Pizza Builder deal to validate
+        const deal = await prisma.pizzaBuilderDeal.findUnique({
+          where: { id: pbItem.pizzaBuilderDealId }
+        });
+        
+        if (!deal) {
+          console.log(`❌ Pizza Builder deal not found for item ${pbItem.id}, will be removed`);
+          continue;
+        }
+        
+        console.log(`✅ Found deal: ${deal.name}`, {
+          availableToppings: deal.availableToppings,
+          toppingsData: deal.toppingsData,
+          maxToppings: deal.maxToppings
+        });
+        
+        // Parse and validate existing selectedToppings
+        let existingToppings = [];
+        try {
+          if (typeof pbItem.selectedToppings === 'string') {
+            const parsed = JSON.parse(pbItem.selectedToppings);
+            if (Array.isArray(parsed)) {
+              existingToppings = parsed;
+              console.log(`📋 Existing toppings (array format):`, existingToppings);
+            } else if (typeof parsed === 'object') {
+              // Convert {id: name} to array format
+              existingToppings = Object.entries(parsed).map(([id, name]) => ({
+                id: id,
+                name: name,
+                quantity: 1
+              }));
+              console.log(`📋 Existing toppings (object format converted):`, existingToppings);
+            }
+          } else if (Array.isArray(pbItem.selectedToppings)) {
+            existingToppings = pbItem.selectedToppings;
+            console.log(`📋 Existing toppings (direct array):`, existingToppings);
+          }
+        } catch (error) {
+          console.log(`❌ Error parsing existing toppings for item ${pbItem.id}:`, error);
+          existingToppings = [];
+        }
+        
+        console.log('=== END EXISTING PIZZA BUILDER VALIDATION ===');
+      }
+    } else {
+      console.log('📝 No existing cart items to validate');
+    }
+
     // Batch process VALIDATED items only
     const itemsToUpdate = [];
     const itemsToCreate = [];
@@ -1592,7 +1894,7 @@ export default async function syncCart(req, res) {
     for (const validatedItem of validatedItems) {
       // Better handling of different item types
       let pizzaId = null;
-      if (!validatedItem.isCombo && !validatedItem.isOtherItem && !validatedItem.comboStyleItemId) {
+      if (!validatedItem.isCombo && !validatedItem.isOtherItem && !validatedItem.comboStyleItemId && !validatedItem.isPizzaBuilder) {
         pizzaId = validatedItem.pizzaId || validatedItem.pizza?.id || validatedItem.id;
         if (!pizzaId) {
           console.warn("⚠️ Skipping pizza item with missing pizzaId:", validatedItem);
@@ -1630,7 +1932,27 @@ export default async function syncCart(req, res) {
           })) || [],
         };
         
-        return itemsMatch(itemWithToppingsAndIngredients, validatedItem);
+        const matches = itemsMatch(itemWithToppingsAndIngredients, validatedItem);
+        if (matches) {
+          console.log(`🔄 MERGE: Found matching existing item for ${validatedItem.title || validatedItem.name}`);
+        }
+        return matches;
+      });
+
+      // **NEW: Also check for duplicates within the current batch**
+      const duplicateInBatch = itemsToCreate.find((createItem) => {
+        // Check if this is the same Pizza Builder item already being created
+        if (validatedItem.isPizzaBuilder && createItem.pizzaBuilderDealId) {
+          const isSameDeal = createItem.pizzaBuilderDealId === (validatedItem.pizzaBuilderDealId || validatedItem.id);
+          const isSameSize = createItem.size === validatedItem.size;
+          const isSameBase = createItem.pizzaBase === (validatedItem.pizzaBase || validatedItem.selectedItems?.base || "Regular Crust");
+          
+          if (isSameDeal && isSameSize && isSameBase) {
+            console.log(`🔄 BATCH DUPLICATE: Found duplicate Pizza Builder in current batch - ${validatedItem.title || validatedItem.name}`);
+            return true;
+          }
+        }
+        return false;
       });
 
       // USE ONLY SECURE PRICES - NEVER TRUST FRONTEND
@@ -1639,14 +1961,86 @@ export default async function syncCart(req, res) {
 
       if (existing) {
         // Update existing item quantities with SECURE PRICE
+        console.log(`📝 UPDATING existing cart item: ${validatedItem.title || validatedItem.name}`);
         itemsToUpdate.push({
           id: existing.id,
           quantity: existing.quantity + validatedItem.quantity,
           finalPrice: Number(existing.finalPrice) + Number(securePrice),
         });
+      } else if (duplicateInBatch) {
+        // Merge with existing item in batch
+        console.log(`📝 MERGING with batch item: ${validatedItem.title || validatedItem.name}`);
+        duplicateInBatch.quantity += validatedItem.quantity;
+        duplicateInBatch.finalPrice = Number(duplicateInBatch.finalPrice) + Number(securePrice);
       } else {
         // Create new item with SECURE PRICE
-        if (validatedItem.comboStyleItemId) {
+        console.log(`🆕 CREATING new cart item: ${validatedItem.title || validatedItem.name}`);
+        if (validatedItem.isPizzaBuilder) {
+          // **ENHANCED: Handle Pizza Builder items**
+          console.log('=== PIZZA BUILDER CART MERGE DEBUG ===');
+          console.log(`🍕 Creating Pizza Builder cart item: ${validatedItem.title || validatedItem.name}`);
+          
+          // Get the correct Pizza Builder deal ID
+          const pizzaBuilderDealId = validatedItem.pizzaBuilderDealId || validatedItem.id;
+          console.log(`🆔 Pizza Builder Deal ID: ${pizzaBuilderDealId}`);
+          
+          // **NEW: Format selected toppings as {id:name, id:name}**
+          const receivedToppings = validatedItem.cleanedToppings || validatedItem.toppings || validatedItem.selectedItems?.toppings || [];
+          
+          // **FIXED: Only process actually selected toppings (quantity > 0)**
+          const actuallySelectedToppings = receivedToppings.filter(topping => 
+            topping.quantity && topping.quantity > 0
+          );
+          
+          console.log(`🧄 Received ${receivedToppings.length} toppings, ${actuallySelectedToppings.length} actually selected`);
+          console.log(`🧄 Selected toppings:`, actuallySelectedToppings.map(t => `${t.name}(${t.quantity})`).join(', '));
+          
+          const toppingsObject = {};
+          
+          actuallySelectedToppings.forEach(topping => {
+            if (topping.quantity > 0) {
+              // Store in format {id: name} for each selected topping
+              toppingsObject[topping.id] = topping.name;
+              console.log(`   ✅ Added topping: ${topping.id} -> ${topping.name} (qty: ${topping.quantity})`);
+            } else {
+              console.log(`   ❌ Skipped topping: ${topping.name} (qty: ${topping.quantity})`);
+            }
+          });
+          
+          const toppingsString = JSON.stringify(toppingsObject);
+          console.log(`🧄 Final Pizza Builder toppings format: ${toppingsString}`);
+          console.log(`📏 Size: ${validatedItem.size || "Medium"}`);
+          console.log(`🍞 Base: ${validatedItem.pizzaBase || validatedItem.selectedItems?.base || "Regular Crust"}`);
+          console.log(`💰 Secure Price: £${securePrice.toFixed(2)} (each: £${secureEachPrice.toFixed(2)})`);
+          console.log(`📦 Quantity: ${validatedItem.quantity}`);
+          
+          const cartItemData = {
+            cartId: cart.id,
+            pizzaId: null, // Pizza Builder is not a regular pizza
+            comboId: null,
+            otherItemId: null,
+            comboStyleItemId: null,
+            pizzaBuilderDealId: pizzaBuilderDealId, // Store the Pizza Builder deal ID
+            size: validatedItem.size || "Medium",
+            quantity: validatedItem.quantity,
+            basePrice: secureEachPrice,
+            finalPrice: securePrice,
+            pizzaBase: validatedItem.pizzaBase || validatedItem.selectedItems?.base || "Regular Crust",
+            // **REMOVED: sauce field (not needed)**
+            // sauce: validatedItem.sauce || validatedItem.selectedItems?.sauce || "Tomato Sauce",
+            isCombo: false,
+            isOtherItem: false,
+            maxToppings: validatedItem.maxToppings || 4,
+            // **NEW: Store toppings as formatted string {id:name, id:name}**
+            selectedToppings: toppingsString,
+            toppings: [], // Keep empty for Pizza Builder (use selectedToppings instead)
+            ingredients: [], // Pizza Builder doesn't use ingredients
+          };
+          
+          console.log(`📄 Cart item data to be created:`, cartItemData);
+          itemsToCreate.push(cartItemData);
+          console.log('=== END PIZZA BUILDER CART MERGE DEBUG ===');
+        } else if (validatedItem.comboStyleItemId) {
           // Handle combo style items
           itemsToCreate.push({
             cartId: cart.id,
@@ -1783,8 +2177,8 @@ export default async function syncCart(req, res) {
 
       // Batch create new items
       const createPromises = itemsToCreate.map(item => {
-        if (item.toppings.length > 0 || item.ingredients.length > 0) {
-          // Create pizza items with toppings/ingredients
+        if (item.toppings.length > 0 || item.ingredients.length > 0 || item.pizzaBuilderDealId) {
+          // Create pizza items with toppings/ingredients OR Pizza Builder items
           return tx.cartItem.create({
             data: {
               cartId: item.cartId,
@@ -1792,6 +2186,7 @@ export default async function syncCart(req, res) {
               comboId: item.comboId,
               otherItemId: item.otherItemId,
               comboStyleItemId: item.comboStyleItemId, // Add combo style item support
+              pizzaBuilderDealId: item.pizzaBuilderDealId, // Add Pizza Builder support
               size: item.size,
               quantity: item.quantity,
               basePrice: item.basePrice,
@@ -1803,6 +2198,8 @@ export default async function syncCart(req, res) {
               selectedSides: item.selectedSides, // Add sides selection
               selectedDrinks: item.selectedDrinks, // Add drinks selection
               sauce: item.sauce, // Add sauce selection
+              maxToppings: item.maxToppings, // Add max toppings for Pizza Builder
+              selectedToppings: item.selectedToppings, // Add selected toppings for Pizza Builder
               cartToppings: {
                 create: item.toppings.map((t) => ({
                   toppingId: t.id,
@@ -1832,11 +2229,13 @@ export default async function syncCart(req, res) {
               comboId: item.comboId,
               otherItemId: item.otherItemId,
               comboStyleItemId: item.comboStyleItemId, // Add combo style item support
+              pizzaBuilderDealId: item.pizzaBuilderDealId, // Add Pizza Builder support
               // **NEW: Add user choice item support with Pizza Builder fields**
               userChoiceId: item.userChoiceId,
               userChoiceSelections: item.userChoiceSelections,
               additionalToppingCost: item.additionalToppingCost || 0,
               maxToppings: item.maxToppings || 4,
+              selectedToppings: item.selectedToppings, // Add selected toppings for Pizza Builder
               size: item.size,
               quantity: item.quantity,
               basePrice: item.basePrice,

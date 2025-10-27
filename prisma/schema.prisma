@@ -185,6 +185,9 @@ model OrderItem {
   userChoiceSelections String?
   pizzaBuilderData     String?
   pizzaBuilderDealId   String?
+  pizzaBuilderToppings String?            // New field for Pizza Builder topping details
+  selectedToppings     String?            // Add selectedToppings field
+  maxToppings          Int?               // Add maxToppings field
   orderIngredients     OrderIngredients[]
   combo                ComboOffers?       @relation(fields: [comboId], references: [id])
   comboStyleItem       ComboStyleItem?    @relation(fields: [comboStyleItemId], references: [id])
@@ -388,7 +391,13 @@ model PizzaBuilderDeal {
   displayCategoryId String
   availableSizes    Json
   availableToppings Json
-  sizePricing       Json
+  toppingsData      Json?       @default("{}")  // NEW: Store {id: name} format for toppings
+  
+  // Size-based pricing - Medium, Large, Super Size only
+  mediumPrice       Decimal?
+  largePrice        Decimal?
+  superSizePrice    Decimal?
+  
   isActive          Boolean     @default(true)
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
@@ -412,4 +421,18 @@ enum PizzaSize {
   MEDIUM
   LARGE
   SUPER_SIZE
+}
+
+model SpecialOffer {
+  id          String   @id @default(cuid())
+  title       String
+  offerText   String
+  price       Decimal
+  description String?
+  orderUrl    String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("special_offers")
 }
