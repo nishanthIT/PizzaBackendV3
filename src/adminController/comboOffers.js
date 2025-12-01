@@ -1087,3 +1087,25 @@ export const getComboById = async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 };
+
+// Toggle out of stock status for combo offers
+export const toggleComboOutOfStock = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isOutOfStock } = req.body;
+
+    const combo = await prisma.comboOffers.update({
+      where: { id },
+      data: { isOutOfStock: Boolean(isOutOfStock) },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `Combo Offer ${isOutOfStock ? 'marked as out of stock' : 'marked as available'}`,
+      combo
+    });
+  } catch (error) {
+    console.error("Error updating combo out of stock status:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};

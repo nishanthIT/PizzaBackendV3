@@ -9,6 +9,7 @@ export const getAllComboStyleItemsPublic = async (req, res) => {
     
     const whereClause = {
       isActive: true,
+      isOutOfStock: false, // Filter out out-of-stock items
       ...(categoryId && { categoryId })
     };
     
@@ -34,7 +35,8 @@ export const getComboStyleItemByIdPublic = async (req, res) => {
     const item = await prisma.comboStyleItem.findFirst({
       where: { 
         id,
-        isActive: true 
+        isActive: true,
+        isOutOfStock: false // Filter out out-of-stock items
       },
       include: {
         category: true

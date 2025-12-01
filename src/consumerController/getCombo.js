@@ -4,6 +4,9 @@ const prisma = new PrismaClient();
 const getAllcomboList = async (req, res) => {
   try {
     const combos = await prisma.comboOffers.findMany({
+      where: {
+        isOutOfStock: false, // Filter out out-of-stock combos
+      },
       include: {
         pizzas: {
           include: {
@@ -26,7 +29,10 @@ const getComboByIdUser = async (req, res) => {
 
   try {
     const combo = await prisma.comboOffers.findUnique({
-      where: { id },
+      where: { 
+        id,
+        isOutOfStock: false // Only return if not out of stock
+      },
       include: {
         pizzas: {
           include: {

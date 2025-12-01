@@ -491,7 +491,27 @@ const getAvailableDrinksPublic = async (req, res) => {
   }
 };
 
+// Toggle out of stock status for combo style items
+const toggleComboStyleItemOutOfStock = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isOutOfStock } = req.body;
 
+    const comboStyleItem = await prisma.comboStyleItem.update({
+      where: { id },
+      data: { isOutOfStock: Boolean(isOutOfStock) },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `Combo Style Item ${isOutOfStock ? 'marked as out of stock' : 'marked as available'}`,
+      comboStyleItem
+    });
+  } catch (error) {
+    console.error("Error updating combo style item out of stock status:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
 
 // Export all functions for both admin and consumer routes
 export { 
@@ -508,7 +528,8 @@ export {
   getComboStyleItemByIdPublic,
   getAvailableSidesPublic,
   getAvailableDrinksPublic,
-  getAvailableSauces
+  getAvailableSauces,
+  toggleComboStyleItemOutOfStock
 };
 
 

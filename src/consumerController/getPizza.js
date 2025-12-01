@@ -21,6 +21,9 @@ const getPizzabyCategory = async (req, res) => {
       },
       include: {
         pizzas: {
+          where: {
+            isOutOfStock: false, // Filter out out-of-stock items
+          },
           include: {
             defaultToppings: {
               include: {
@@ -37,6 +40,13 @@ const getPizzabyCategory = async (req, res) => {
       },
     });
 
+    // Add cache control headers to prevent frontend caching of out-of-stock items
+    res.set({
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
+    
     return res.status(200).json({
       message: "Pizzas fetched successfully",
       data: pizzas,
@@ -52,6 +62,7 @@ const getPizzaById = async (req, res) => {
     const pizza = await prisma.pizza.findUnique({
       where: {
         id: id,
+        isOutOfStock: false, // Filter out out-of-stock items
       },
       include: {
         category: true,
@@ -67,6 +78,14 @@ const getPizzaById = async (req, res) => {
     if (!pizza) {
       return res.status(404).json({ message: "Pizza not found" });
     }
+    
+    // Add cache control headers to prevent frontend caching of out-of-stock items
+    res.set({
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
+    
     return res
       .status(200)
       .json({ message: "Pizza fetched successfully", data: pizza });
@@ -114,7 +133,19 @@ const getAllIngredients = async (req, res) => {
 
 const getAllPizzaList = async (req, res) => {
   try {
-    const pizzas = await prisma.pizza.findMany();
+    const pizzas = await prisma.pizza.findMany({
+      where: {
+        isOutOfStock: false, // Filter out out-of-stock items
+      },
+    });
+    
+    // Add cache control headers to prevent frontend caching of out-of-stock items
+    res.set({
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
+    
     return res
       .status(200)
       .json({ message: "Pizzas fetched successfully", data: pizzas });

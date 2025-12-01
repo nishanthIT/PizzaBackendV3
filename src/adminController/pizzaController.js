@@ -311,4 +311,26 @@ const getAllPizzas = async (req, res) => {
   }
 };
 
-export { addPizza, updatePizza, deletePizza, getAllPizzas };
+// Toggle out of stock status
+const toggleOutOfStock = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isOutOfStock } = req.body;
+
+    const pizza = await prisma.pizza.update({
+      where: { id },
+      data: { isOutOfStock: Boolean(isOutOfStock) },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `Pizza ${isOutOfStock ? 'marked as out of stock' : 'marked as available'}`,
+      pizza
+    });
+  } catch (error) {
+    console.error("Error updating out of stock status:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+export { addPizza, updatePizza, deletePizza, getAllPizzas, toggleOutOfStock };

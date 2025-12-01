@@ -207,4 +207,26 @@ const getAllOtherItems = async (req, res) => {
   }
 };
 
-export { addOtherItem, updateOtherItem, deleteOtherItem, getAllOtherItems };
+// Toggle out of stock status for other items
+const toggleOtherItemOutOfStock = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isOutOfStock } = req.body;
+
+    const otherItem = await prisma.otherItem.update({
+      where: { id },
+      data: { isOutOfStock: Boolean(isOutOfStock) },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `Other Item ${isOutOfStock ? 'marked as out of stock' : 'marked as available'}`,
+      otherItem
+    });
+  } catch (error) {
+    console.error("Error updating other item out of stock status:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+export { addOtherItem, updateOtherItem, deleteOtherItem, getAllOtherItems, toggleOtherItemOutOfStock };

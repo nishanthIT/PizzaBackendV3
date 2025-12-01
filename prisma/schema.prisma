@@ -37,6 +37,7 @@ model Pizza {
   categoryId         String
   createdAt          DateTime             @default(now())
   sizes              Json
+  isOutOfStock       Boolean              @default(false)
   cartItems          CartItem[]
   comboItems         ComboItem[]
   comboPizzas        ComboPizza[]
@@ -54,6 +55,7 @@ model ComboOffers {
   discount    Decimal
   createdAt   DateTime     @default(now())
   price       Decimal
+  isOutOfStock Boolean     @default(false)
   cartItems   CartItem[]
   comboItems  ComboItem[]
   pizzas      ComboPizza[]
@@ -284,6 +286,7 @@ model OtherItem {
   createdAt       DateTime    @default(now())
   categoryId      String
   availableSauces String?
+  isOutOfStock    Boolean     @default(false)
   cartItems       CartItem[]
   comboItems      ComboItem[]
   orderItems      OrderItem[]
@@ -302,6 +305,7 @@ model PeriPeriItem {
   itemType        String
   availableSauces String
   createdAt       DateTime    @default(now())
+  isOutOfStock    Boolean     @default(false)
   cartItems       CartItem[]
   orderItems      OrderItem[]
 }
@@ -316,6 +320,7 @@ model ComboStyleItem {
   availableSauces Json
   mealDealConfig  Json
   isActive        Boolean     @default(true)
+  isOutOfStock    Boolean     @default(false)
   createdAt       DateTime    @default(now())
   cartItems       CartItem[]
   category        Category    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
@@ -346,6 +351,8 @@ model UserChoice {
   basePrice         Decimal
   categoryConfigs   Json
   isActive          Boolean     @default(true)
+  isOutOfStock      Boolean     @default(false)
+  hideFromHomePage  Boolean     @default(false)
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
   cartItems         CartItem[]
@@ -399,6 +406,7 @@ model PizzaBuilderDeal {
   superSizePrice    Decimal?
   
   isActive          Boolean     @default(true)
+  isOutOfStock      Boolean     @default(false)
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
   availableBases    Json

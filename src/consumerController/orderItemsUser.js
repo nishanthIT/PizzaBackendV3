@@ -20,6 +20,7 @@ const getOtherItemByCategory = async (req, res) => {
     const otherItems = await prisma.otherItem.findMany({
       where: {
         categoryId,
+        isOutOfStock: false, // Filter out out-of-stock items
       },
       include: {
         category: {
@@ -44,6 +45,7 @@ const getOtherItemById = async (req, res) => {
     const otherItem = await prisma.otherItem.findUnique({
       where: {
         id,
+        isOutOfStock: false, // Only return if not out of stock
       },
       include: {
         category: {

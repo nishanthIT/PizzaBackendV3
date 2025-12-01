@@ -11,7 +11,8 @@ export const getAllUserChoicesPublic = async (req, res) => {
     const whereClause = {
       // Only filter by isActive if showInactive is not true
       ...(showInactive !== 'true' && { isActive: true }),
-      ...(categoryId && { displayCategoryId: categoryId })
+      ...(categoryId && { displayCategoryId: categoryId }),
+      isOutOfStock: false // Filter out out-of-stock items
     };
     
     console.log("🔧 Query filters:", whereClause);
@@ -36,6 +37,13 @@ export const getAllUserChoicesPublic = async (req, res) => {
       isActive: choice.isActive
     })));
     
+    // Add cache control headers to prevent frontend caching of out-of-stock items
+    res.set({
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
+    
     res.status(200).json(userChoices);
   } catch (error) {
     console.error("Error fetching user choices:", error);
@@ -55,7 +63,8 @@ export const getUserChoiceByIdPublic = async (req, res) => {
     const whereClause = {
       id,
       // Only filter by isActive if allowInactive is not true
-      ...(allowInactive !== 'true' && { isActive: true })
+      ...(allowInactive !== 'true' && { isActive: true }),
+      isOutOfStock: false // Filter out out-of-stock items
     };
     
     const userChoice = await prisma.userChoice.findFirst({

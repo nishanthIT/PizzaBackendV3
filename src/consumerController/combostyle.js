@@ -10,7 +10,10 @@ const prisma = new PrismaClient();
 export const getAllComboStyleItemsPublic = async (req, res) => {
   try {
     const items = await prisma.comboStyleItem.findMany({
-      where: { isActive: true },
+      where: { 
+        isActive: true,
+        isOutOfStock: false // Filter out out-of-stock items
+      },
       include: {
         category: true,
         sidesCategory: {
@@ -35,7 +38,11 @@ export const getComboStyleItemByIdPublic = async (req, res) => {
     const { id } = req.params;
     
     const item = await prisma.comboStyleItem.findUnique({
-      where: { id, isActive: true },
+      where: { 
+        id,
+        isActive: true,
+        isOutOfStock: false // Filter out out-of-stock items
+      },
       include: {
         category: true,
         sidesCategory: {

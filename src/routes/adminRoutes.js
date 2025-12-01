@@ -24,12 +24,14 @@ import {
   deletePizza,
   getAllPizzas,
   updatePizza,
+  toggleOutOfStock
 } from "../adminController/pizzaController.js";
 import {
   addComboOffer,
   deleteComboOffer,
   editComboOffer,
   getComboOffer,
+  toggleComboOutOfStock
 } from "../adminController/comboOffers.js";
 import serveImmg from "../consumerController/imageController.js";
 import { convertToPng, upload } from "../middleware/upload.js";
@@ -44,6 +46,7 @@ import {
   deleteOtherItem,
   getAllOtherItems,
   updateOtherItem,
+  toggleOtherItemOutOfStock
 } from "../adminController/otherItems.js";
 // Removed peri-peri imports - now using combo style items
 import {
@@ -63,7 +66,8 @@ import {
   deleteComboStyleItem,
   getAvailableSauces,
   getAvailableSides,
-  getAvailableDrinks
+  getAvailableDrinks,
+  toggleComboStyleItemOutOfStock
 } from "../adminController/comboStyleItems.js";
 import {
   getAllCustomers,
@@ -81,7 +85,9 @@ import {
   updateUserChoice,
   deleteUserChoice,
   getCategoryItems,
-  uploadMiddleware
+  uploadMiddleware,
+  toggleUserChoiceOutOfStock,
+  toggleUserChoiceHideFromHomePage
 } from "../adminController/userChoiceController.js";
 
 import {
@@ -99,7 +105,8 @@ import {
   createPizzaBuilderDeal,
   updatePizzaBuilderDeal,
   deletePizzaBuilderDeal,
-  togglePizzaBuilderDealStatus
+  togglePizzaBuilderDealStatus,
+  togglePizzaBuilderOutOfStock
 } from "../adminController/pizzaBuilderController.js";
 import {
   getSpecialOffer,
@@ -107,6 +114,10 @@ import {
   updateSpecialOffer,
   deleteSpecialOffer
 } from "../adminController/specialOfferController.js";
+import {
+  getAllPeriPeriItems,
+  togglePeriPeriOutOfStock
+} from "../adminController/periPeriController.js";
 
 
 const router = express.Router();
@@ -247,6 +258,19 @@ adminRouter.get("/special-offer", getSpecialOffer);
 adminRouter.post("/special-offer", createSpecialOffer);
 adminRouter.put("/special-offer/:id", updateSpecialOffer);
 adminRouter.delete("/special-offer/:id", deleteSpecialOffer);
+
+// PeriPeri routes
+adminRouter.get("/periPeri", getAllPeriPeriItems);
+
+// Out of Stock Management Routes
+adminRouter.patch("/pizzas/:id/out-of-stock", toggleOutOfStock);
+adminRouter.patch("/combos/:id/out-of-stock", toggleComboOutOfStock);
+adminRouter.patch("/other-items/:id/out-of-stock", toggleOtherItemOutOfStock);
+adminRouter.patch("/combo-style-items/:id/out-of-stock", toggleComboStyleItemOutOfStock);
+adminRouter.patch("/userChoices/:id/out-of-stock", toggleUserChoiceOutOfStock);
+adminRouter.patch("/userChoices/:id/hide-from-home", toggleUserChoiceHideFromHomePage);
+adminRouter.patch("/pizzaBuilder/:id/out-of-stock", togglePizzaBuilderOutOfStock);
+adminRouter.patch("/periPeri/:id/out-of-stock", togglePeriPeriOutOfStock);
 
 // Mount the admin router under /admin path
 router.use("/admin", adminRouter);

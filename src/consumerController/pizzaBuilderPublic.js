@@ -9,6 +9,7 @@ const getAllActivePizzaBuilderDeals = async (req, res) => {
     const whereClause = {
       ...(showInactive !== 'true' && { isActive: true }),
       ...(categoryId && { displayCategoryId: categoryId }),
+      isOutOfStock: false, // Filter out out-of-stock items
     };
 
     const deals = await prisma.pizzaBuilderDeal.findMany({
@@ -26,6 +27,13 @@ const getAllActivePizzaBuilderDeals = async (req, res) => {
       },
     });
 
+    // Add cache control headers to prevent frontend caching of out-of-stock items
+    res.set({
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
+    
     res.json(deals);
   } catch (error) {
     console.error('Error fetching active pizza builder deals:', error);
@@ -42,6 +50,7 @@ const getPizzaBuilderDealByIdPublic = async (req, res) => {
     const whereClause = {
       id,
       ...(allowInactive !== 'true' && { isActive: true }),
+      isOutOfStock: false, // Filter out out-of-stock items
     };
 
     const deal = await prisma.pizzaBuilderDeal.findFirst({

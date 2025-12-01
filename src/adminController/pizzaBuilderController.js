@@ -320,6 +320,28 @@ const togglePizzaBuilderDealStatus = async (req, res) => {
   }
 };
 
+// Toggle out of stock status for pizza builder deals
+const togglePizzaBuilderOutOfStock = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isOutOfStock } = req.body;
+
+    const pizzaBuilderDeal = await prisma.pizzaBuilderDeal.update({
+      where: { id },
+      data: { isOutOfStock: Boolean(isOutOfStock) },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `Pizza Builder Deal ${isOutOfStock ? 'marked as out of stock' : 'marked as available'}`,
+      pizzaBuilderDeal
+    });
+  } catch (error) {
+    console.error("Error updating pizza builder deal out of stock status:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
 export {
   getAllPizzaBuilderDeals,
   getPizzaBuilderDealById,
@@ -327,4 +349,5 @@ export {
   updatePizzaBuilderDeal,
   deletePizzaBuilderDeal,
   togglePizzaBuilderDealStatus,
+  togglePizzaBuilderOutOfStock,
 };

@@ -68,7 +68,9 @@ export const getActiveUserChoices = async (req, res) => {
   try {
     const activeUserChoices = await prisma.userChoice.findMany({
       where: {
-        isActive: true
+        isActive: true,
+        isOutOfStock: false,
+        hideFromHomePage: false
       },
       include: {
         displayCategory: {
@@ -389,6 +391,50 @@ export const getCategoryItems = async (req, res) => {
 // Middleware for file upload
 export const uploadMiddleware = upload.single('image');
 
+// Toggle out of stock status for user choices
+export const toggleUserChoiceOutOfStock = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isOutOfStock } = req.body;
+
+    const userChoice = await prisma.userChoice.update({
+      where: { id },
+      data: { isOutOfStock: Boolean(isOutOfStock) },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `User Choice ${isOutOfStock ? 'marked as out of stock' : 'marked as available'}`,
+      userChoice
+    });
+  } catch (error) {
+    console.error("Error updating user choice out of stock status:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+// Toggle hide from home page status for user choices
+export const toggleUserChoiceHideFromHomePage = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { hideFromHomePage } = req.body;
+
+    const userChoice = await prisma.userChoice.update({
+      where: { id },
+      data: { hideFromHomePage: Boolean(hideFromHomePage) },
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `User Choice ${hideFromHomePage ? 'hidden from home page' : 'shown on home page'}`,
+      userChoice
+    });
+  } catch (error) {
+    console.error("Error updating user choice hide from home page status:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
 export default {
   getAllUserChoices,
   getActiveUserChoices,
@@ -397,5 +443,7 @@ export default {
   updateUserChoice,
   deleteUserChoice,
   getCategoryItems,
-  uploadMiddleware
+  uploadMiddleware,
+  toggleUserChoiceOutOfStock,
+  toggleUserChoiceHideFromHomePage
 };

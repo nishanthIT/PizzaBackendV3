@@ -771,9 +771,9 @@ import {
   getUserChoiceItems 
 } from "./consumerController/userChoicePublic.js";
 import { 
-  getAllPizzaBuilderDeals,
-  getPizzaBuilderDealById 
-} from "./adminController/pizzaBuilderController.js";
+  getAllActivePizzaBuilderDeals,
+  getPizzaBuilderDealByIdPublic 
+} from "./consumerController/pizzaBuilderPublic.js";
 import { getActiveSpecialOffer } from "./adminController/specialOfferController.js";
 // import { rateLimitMiddleware } from "./middleware/rateLimiter.js";
 
@@ -823,7 +823,7 @@ const corsOptions = {
     "http://localhost:3001"  // User frontend
   ],
   credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
 };
 
@@ -834,7 +834,7 @@ app.use((req, res, next) => {
   // Set CORS headers explicitly for preflight requests
   res.header('Access-Control-Allow-Origin', req.headers.origin);
   res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   
   // Add CSP headers to allow image loading
@@ -1452,8 +1452,8 @@ app.get("/api/getUserChoice/:id", getUserChoiceByIdPublic);
 app.get("/api/getUserChoiceItems", getUserChoiceItems);
 
 // Pizza Builder public endpoints (for frontend access)
-app.get("/api/pizza-builder-deals", getAllPizzaBuilderDeals);
-app.get("/api/pizza-builder-deals/:id", getPizzaBuilderDealById);
+app.get("/api/pizza-builder-deals", getAllActivePizzaBuilderDeals);
+app.get("/api/pizza-builder-deals/:id", getPizzaBuilderDealByIdPublic);
 
 // Special Offer public endpoint (for frontend access)
 app.get("/api/special-offer", getActiveSpecialOffer);

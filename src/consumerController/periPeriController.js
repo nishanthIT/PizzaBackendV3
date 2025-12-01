@@ -5,6 +5,9 @@ const prisma = new PrismaClient();
 const getAllPeriPeriItems = async (req, res) => {
   try {
     const periPeriItems = await prisma.periPeriItem.findMany({
+      where: {
+        isOutOfStock: false, // Filter out out-of-stock items
+      },
       orderBy: [
         { itemType: 'asc' }, // quarter, half, whole, wings
         { basePrice: 'asc' }
@@ -23,7 +26,10 @@ const getPeriPeriItemById = async (req, res) => {
     const { id } = req.params;
     
     const periPeriItem = await prisma.periPeriItem.findUnique({
-      where: { id }
+      where: { 
+        id,
+        isOutOfStock: false // Only return if not out of stock
+      }
     });
 
     if (!periPeriItem) {
